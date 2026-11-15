@@ -1,0 +1,6 @@
+{
+  "name": "muka",
+  "version": "1.0.0",
+  "description": "Muka: a panel that shows and steers your Claude Code agents, smart coordination rules you can switch on and off, and a one-command setup for the helper agents, status line and settings",
+  "types": "./types/index.d.ts"
+}

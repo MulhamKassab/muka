@@ -1,0 +1,14 @@
+{
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
+  },
+  "model": "sonnet",
+  "statusLine": {
+    "type": "command",
+    "command": "node ~/.claude/statusline.js"
+  },
+  "advisorModel": "fable",
+  "askUserQuestionTimeout": "60s",
+  "agentPushNotifEnabled": true,
+  "inputNeededNotifEnabled": true
+}

@@ -1,0 +1,5 @@
+{
+  "name": "muka",
+  "owner": { "name": "Mulham Kassab" },
+  "plugins": [{ "name": "muka", "source": "./" }]
+}
