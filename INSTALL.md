@@ -14,13 +14,7 @@ gh auth setup-git
 
 ## The prompt
 
-Paste this into Claude Code on the new computer:
-
-> Install the Muka plugin for me. Run these two commands, one after the other, and show me what they print:
-> 1. `claude plugin marketplace add MulhamKassab/muka`
-> 2. `claude plugin install muka@muka`
->
-> If either fails because GitHub asks for access, stop and tell me to run `gh auth login` and `gh auth setup-git`. When both succeed, tell me to type `/reload-plugins`, then `/muka setup`, then `/muka`.
+Copy the prompt in [INSTALL-PROMPT.md](INSTALL-PROMPT.md) and paste it into Claude Code on the new computer. It checks GitHub access, installs Muka, and tells you what to type next.
 
 ## Then type these yourself
 
