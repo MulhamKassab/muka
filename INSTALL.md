@@ -1,30 +1,23 @@
-# Install Muka on a new computer
+# Install or update Muka (steps for Claude)
 
-## Before you start (once per computer)
+The person pasted the short prompt from the README. Do these steps in order and show what each command prints. If a step fails, stop there and say what it printed and what to do next. Change nothing else on the computer.
 
-This repository is private, so the computer needs GitHub access. In a terminal:
+`<home>` below is the person's home folder as a full path (for example `C:/Users/name` or `/Users/name`).
 
-```bash
-gh auth login
-```
+1. **GitHub access.** Run `gh auth status`. If the GitHub CLI is missing or not signed in, stop and tell the person to install it from https://cli.github.com, run `gh auth login`, then ask again.
+2. **Pull the code.**
+   - If `<home>/muka` exists: `git -C <home>/muka pull`.
+   - Otherwise: `gh repo clone MulhamKassab/muka <home>/muka`.
+3. **Install or update the plugin.** Run `claude plugin marketplace list`.
+   - If a marketplace named `muka` is listed (an update): `claude plugin marketplace update muka`, then `claude plugin update muka@muka`.
+   - Otherwise (a first install): `claude plugin marketplace add <home>/muka`, then `claude plugin install muka@muka`.
+4. **Check.** Run `claude plugin list` and confirm `muka@muka` is enabled. If another copy named `muka` is also enabled (for example `muka@local-mods`, a development copy), say so: two copies would both load.
+5. **Hand over.** Claude can't type slash commands, so tell the person to type these, one at a time:
+   - `/reload-plugins`: loads Muka in this chat (a new chat loads it anyway).
+   - `/muka setup` (first install only): installs the helper agents, the status line and the settings. Anything it replaces is backed up first; `/muka setup undo` puts it back.
+   - `/muka`: shows what is on.
 
-```bash
-gh auth setup-git
-```
-
-## The prompt
-
-Copy the prompt in [INSTALL-PROMPT.md](INSTALL-PROMPT.md) and paste it into Claude Code on the new computer. It checks GitHub access, installs Muka, and tells you what to type next.
-
-## Then type these yourself
-
-Claude can't type slash commands for you, so finish with:
-
-1. `/reload-plugins`: loads Muka (or start a new chat).
-2. `/muka setup`: installs the helper agents (Explore, builder, reviewer, checker), the status line, and the settings (60-second question timeout, Haiku for searching helpers, Sonnet as the main model, notifications). Anything it replaces is backed up first; `/muka setup undo` puts it back.
-3. `/muka`: shows what is on.
-
-## Turning things on and off
+## Commands, for the person
 
 | Command | What it does |
 |---|---|
@@ -37,15 +30,3 @@ Claude can't type slash commands for you, so finish with:
 | `/muka guard on` / `/muka guard off` | Ask before shell commands delete files (off by default) |
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
 | `/muka recap` | Today's finished prompts |
-
-## Updating
-
-```bash
-claude plugin marketplace update muka
-```
-
-```bash
-claude plugin update muka@muka
-```
-
-Then `/reload-plugins`.

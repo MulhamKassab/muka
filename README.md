@@ -10,42 +10,29 @@ It was first called Savvy, then Helm, then Orbit; those commands still work.
 
 ## Install with one prompt
 
-Paste this into Claude Code on the new computer (the same prompt, with notes, is in [INSTALL-PROMPT.md](INSTALL-PROMPT.md)):
+Paste this into Claude Code on any computer. It installs Muka the first time and updates it later:
 
 ```text
-Install the Muka plugin for me from my private GitHub repository MulhamKassab/muka. Do these steps in order and show me what each command prints:
-
-1. Run `gh auth status`. If the GitHub CLI is not installed or not signed in, stop and tell me to install it from https://cli.github.com and run `gh auth login`, then to ask you again.
-2. Run `gh auth setup-git`, so git can read the private repository.
-3. Run `claude plugin marketplace add MulhamKassab/muka`.
-4. Run `claude plugin install muka@muka`.
-5. Run `claude plugin list` and check that muka@muka shows as enabled.
-
-If a step fails, stop there and tell me what it printed and what to do next. Change nothing else on my computer.
-
-When every step succeeds, tell me to type these three commands myself, one at a time:
-- /reload-plugins
-- /muka setup
-- /muka
+Pull my private GitHub repo MulhamKassab/muka into the muka folder in my home folder (gh repo clone, or git pull if it's already there), then install it by following its INSTALL.md.
 ```
+
+Claude follows [INSTALL.md](INSTALL.md), then tells you to type `/reload-plugins`, `/muka setup` and `/muka`. The computer needs the GitHub CLI signed in (`gh auth login`).
 
 ## Install by hand
 
-This repository is private: the computer needs GitHub access first (`gh auth login`, then `gh auth setup-git`). Then, at the prompt of a terminal session:
-
+```bash
+gh repo clone MulhamKassab/muka ~/muka
 ```
-/plugin install muka --marketplace MulhamKassab/muka
-```
-
-From a shell:
 
 ```bash
-claude plugin install muka --marketplace MulhamKassab/muka
+claude plugin marketplace add ~/muka
 ```
 
-In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `MulhamKassab/muka`, then Add plugin.
+```bash
+claude plugin install muka@muka
+```
 
-Then type `/reload-plugins`, `/muka setup` and `/muka`.
+Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C ~/muka pull`, `claude plugin marketplace update muka`, `claude plugin update muka@muka`.
 
 ## Commands
 
