@@ -11,7 +11,8 @@ The person pasted the short prompt from the README. Do these steps in order and 
 3. **Install or update the plugin.** Run `claude plugin marketplace list`.
    - If a marketplace named `muka` is listed (an update): `claude plugin marketplace update muka`, then `claude plugin update muka@muka`.
    - Otherwise (a first install): `claude plugin marketplace add <home>/muka`, then `claude plugin install muka@muka`.
-4. **Check.** Run `claude plugin list` and confirm `muka@muka` is enabled. If another copy named `muka` is also enabled (for example `muka@local-mods`, a development copy), say so: two copies would both load.
+   - **Modern Web Guidance** (Google Chrome's web best-practice guides, part of Muka): if `claude plugin marketplace list` has no `googlechrome`, run `claude plugin marketplace add GoogleChrome/modern-web-guidance`; then, if `claude plugin list` has no `modern-web-guidance@googlechrome`, run `claude plugin install modern-web-guidance@googlechrome`. On an update, run `claude plugin update modern-web-guidance@googlechrome` instead.
+4. **Check.** Run `claude plugin list` and confirm `muka@muka` and `modern-web-guidance@googlechrome` are enabled. If another copy named `muka` is also enabled (for example `muka@local-mods`, a development copy), say so: two copies would both load.
 5. **Hand over.** Claude can't type slash commands, so tell the person to type these, one at a time:
    - `/reload-plugins`: loads Muka in this chat (a new chat loads it anyway).
    - `/muka setup` (first install only): installs the helper agents, the status line and the settings. Anything it replaces is backed up first; `/muka setup undo` puts it back.

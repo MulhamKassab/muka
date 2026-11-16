@@ -49,14 +49,14 @@ const engine = (on: On, files: Map<string, string>, store: Record<string, unknow
 
 const HOME = 'C:/Users/tester/.claude'
 
-test('settings merge: env key by key, Muka keys replaced, plugins and marketplaces kept', () => {
-  const cur = { model: 'opus', env: { FOO: '1' }, enabledPlugins: { x: true }, extraKnownMarketplaces: { m: {} }, theme: 'dark' }
-  const add = { model: 'sonnet', env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, enabledPlugins: { y: true } }
+test('settings merge: env key by key, Muka keys replaced, plugins and marketplaces added without overriding yours', () => {
+  const cur = { model: 'opus', env: { FOO: '1' }, enabledPlugins: { x: true, z: false }, extraKnownMarketplaces: { m: {} }, theme: 'dark' }
+  const add = { model: 'sonnet', env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, enabledPlugins: { y: true, z: true }, extraKnownMarketplaces: { g: { a: 1 } } }
   expect(mergeMukaSettings(cur, add)).toEqual({
     model: 'sonnet',
     env: { FOO: '1', CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' },
-    enabledPlugins: { x: true },
-    extraKnownMarketplaces: { m: {} },
+    enabledPlugins: { x: true, y: true, z: false },
+    extraKnownMarketplaces: { m: {}, g: { a: 1 } },
     theme: 'dark',
   })
 })

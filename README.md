@@ -66,7 +66,8 @@ While smart is on, Muka adds the coordination rules to every new chat, the same 
 
 - **Agents** in `~/.claude/agents`: `Explore` (Haiku, read-only), `builder` (Sonnet), `reviewer` (Sonnet, read-only), `checker` (Opus, read-only, only on request).
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
-- **Settings** merged into `~/.claude/settings.json`: Haiku for helpers that name no model, Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings, plugins and marketplaces are kept; `env` is merged key by key.
+- **Settings** merged into `~/.claude/settings.json`: Haiku for helpers that name no model, Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
+- **[Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance)**, Google Chrome's plugin of up-to-date web best practices (HTML, CSS, browser JavaScript, accessibility, performance): its marketplace and plugin are added to the settings, and the install prompt installs it.
 
 Everything it replaces is copied first to `~/.claude/backups/muka-setup-<time>/`; `/muka setup undo` puts it back. Files it added new stay in place. If `settings.json` can't be read, setup changes nothing.
 

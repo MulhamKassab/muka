@@ -2581,8 +2581,12 @@ const SETUP_LAST = 'muka-setup-last.json'
 export const mergeMukaSettings = (cur: Record<string, unknown>, add: Record<string, unknown>): Record<string, unknown> => {
   const out: Record<string, unknown> = { ...cur }
   for (const [k, v] of Object.entries(add)) {
-    if (k === 'enabledPlugins' || k === 'extraKnownMarketplaces') continue
     const had = cur[k]
+    // Plugins and marketplaces: Muka's are added, yours (including one you turned off) are kept.
+    if (k === 'enabledPlugins' || k === 'extraKnownMarketplaces') {
+      out[k] = { ...(v && typeof v === 'object' ? (v as object) : {}), ...(had && typeof had === 'object' ? (had as object) : {}) }
+      continue
+    }
     if (k === 'env' && v && typeof v === 'object' && had && typeof had === 'object') out[k] = { ...(had as object), ...(v as object) }
     else out[k] = v
   }
