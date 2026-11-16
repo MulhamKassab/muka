@@ -1500,7 +1500,7 @@ export const sizeIn = (text: string): Size | undefined => {
 export const actualSize = (e: LogEntry): Size => {
   const steps = e.mainSteps + (e.agentSteps ?? 0)
   if (e.agents >= 3 || steps >= 60) return 'L'
-  if (e.agents === 0 && steps <= 10) return 'S'
+  if (e.agents === 0 && steps <= 25) return 'S'
   return 'M'
 }
 
@@ -1559,7 +1559,8 @@ export const efficiencyReport = (entries: LogEntry[], days: number): string => {
     `**Muka report, last ${plural(days, 'day')}:** ${plural(entries.length, 'prompt')}, about ${usd(cost)} at API prices (${usd(cost / entries.length)} a prompt), ${kTokens(tokens)} tokens${cache !== undefined ? `, ${cache}% cached` : ''}.`,
   ]
   const models = Object.entries(byModel).sort((a, b) => b[1] - a[1])
-  if (models.length > 0) out.push('', `**By model:** ${models.map(([m, v]) => `${m} ${usd(v)} (${shareOf(v, cost)})`).join(' · ')}`)
+  const modelTotal = models.reduce((n, [, v]) => n + v, 0)
+  if (models.length > 0) out.push('', `**By model:** ${models.map(([m, v]) => `${m} ${usd(v)} (${shareOf(v, modelTotal)})`).join(' · ')}`)
   const helpers = Object.entries(byHelper).sort((a, b) => b[1] - a[1])
   if (helpers.length > 0) out.push(`**By who:** ${helpers.map(([h, v]) => `${h} ${usd(v)}${helperCount[h] ? ` (${helperCount[h]}×)` : ''}`).join(' · ')}`)
   // By size: how many, and what each size costs on average.
@@ -1580,7 +1581,7 @@ export const efficiencyReport = (entries: LogEntry[], days: number): string => {
   // Suggestions, each from a number above.
   const tips: string[] = []
   const pricey = (byModel.opus ?? 0) + (byModel.fable ?? 0)
-  if (cost > 0 && pricey / cost >= 0.5) tips.push(`${shareOf(pricey, cost)} of the spend is on Opus or Fable. For routine work, a Sonnet main agent (\`/model sonnet\`) costs far less.`)
+  if (modelTotal > 0 && pricey / modelTotal >= 0.5) tips.push(`${shareOf(pricey, modelTotal)} of the spend is on Opus or Fable. For routine work, a Sonnet main agent (\`/model sonnet\`) costs far less.`)
   const explore = byHelper.Explore ?? 0
   const helperSpend = helpers.filter(([h]) => h !== 'Main').reduce((n, [, v]) => n + v, 0)
   if (helperSpend > 0 && explore / helperSpend >= 0.4 && (helperCount.Explore ?? 0) >= 5) tips.push(`Explore helpers take ${shareOf(explore, helperSpend)} of the helper spend. Ask them for locations and facts, not whole files, and send fewer at once.`)
@@ -2963,7 +2964,7 @@ export const wasteCheck = (
   const tokens = Math.round(c.text.length / 4)
   // The same call failing again: say so at the second failure, and again at the fourth.
   const what = typeof c.args.command === 'string' ? clean(c.args.command) : path ? wpath(path) : JSON.stringify(c.args).slice(0, 300)
-  const failKey = `${c.agent}|${c.tool}|${what}`
+  const failKey = `${c.agent}|${c.tool}|${typeof c.args.command === 'string' ? what : JSON.stringify(c.args).slice(0, 2000)}`
   if (c.isError) {
     const n = (st.fails.get(failKey) ?? 0) + 1
     st.fails.set(failKey, n)
@@ -3388,6 +3389,7 @@ export const register: Register = on => {
     nudgesOn = (await $.store.get('nudges')) !== false
     modelGuardOn = (await $.store.get('models')) !== false
     largeSent = false
+    Object.assign(wasteState, newWasteState())
     const storedBudget = await $.store.get('budget').catch(() => undefined)
     defaultBudget = storedBudget === null ? undefined : typeof storedBudget === 'number' && storedBudget > 0 ? storedBudget : undefined
     sessionId = (await $.session.id().catch(() => undefined)) ?? `session-${Date.now()}`
@@ -3730,7 +3732,11 @@ ${MUKA_LARGE}`] })
     await checkBudget($).catch(() => undefined)
     // A big drop in context is a compaction: the large-task steps may be gone with it.
     if (ctx.percent !== undefined) {
-      if (lastCtx - ctx.percent >= 25) largeSent = false
+      if (lastCtx - ctx.percent >= 25) {
+        // Compacted: what was read is gone from the context, so reading it again is right.
+        largeSent = false
+        wasteState.reads.clear()
+      }
       lastCtx = ctx.percent
     }
     // A filling context: Main hears about it on its next tool result.

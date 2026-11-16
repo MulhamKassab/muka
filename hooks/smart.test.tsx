@@ -167,3 +167,12 @@ test('the report sums the spend and suggests from the numbers', () => {
   expect(r).toMatch(/The cache served only 45%/)
   expect(efficiencyReport([], 7)).toBe('No finished prompts logged in the last 7 days.')
 })
+
+test('review fixes: different failing edits are not a retry loop; a solo task of 20 steps is small', () => {
+  const st = newWasteState()
+  const edit = (old: string) => call({ tool: 'Edit', args: { file_path: 'a.ts', old_string: old, new_string: 'x' }, isError: true })
+  expect(wasteCheck(st, edit('one'))).toEqual([])
+  expect(wasteCheck(st, edit('two'))).toEqual([])
+  expect(wasteCheck(st, edit('two')).map(h => h.kind)).toEqual(['retry'])
+  expect(actualSize(entry({ mainSteps: 20 }))).toBe('S')
+})
