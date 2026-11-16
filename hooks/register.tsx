@@ -2864,6 +2864,34 @@ export const wasteCheck = (
 }
 
 // ---------------------------------------------------------------------------
+// Smarter rules: a short core in every chat; the full large-task steps join
+// only when a prompt looks large (once per conversation, again after a
+// compaction).
+
+const LARGE_HEAD = '## Large tasks: plan, then swarm'
+const LARGE_END = '## Helpers'
+
+/** The full large-task section of the rules. */
+export const MUKA_LARGE = MUKA_RULES.slice(MUKA_RULES.indexOf(LARGE_HEAD), MUKA_RULES.indexOf(LARGE_END)).trim()
+
+/** The rules every chat starts with: everything but the large-task details, which a one-paragraph summary stands in for. */
+export const MUKA_CORE = MUKA_RULES.replace(
+  MUKA_LARGE,
+  '## Large tasks\n\nFor an L task: scout with `Explore`, write PLAN.md (phases; pieces with Goal / May touch / Must not touch / Done when / Test command; the shared interfaces), one `builder` per independent piece, fit and test it yourself, then one `reviewer`. Muka adds the full steps to a prompt that looks large.',
+)
+
+/** Whether a prompt looks like a large task: long, a list of parts, or the words of a big change. */
+export const looksLarge = (text: string): boolean => {
+  const t = text.trim()
+  if (t.split(/\s+/).length >= 80) return true
+  if (t.split('\n').filter(l => /^\s*(\d+[.)]|[-*•])\s+/.test(l)).length >= 3) return true
+  return /\b(careful mode|from scratch|end[- ]to[- ]end|one by one|refactor|migrat(e|ion)|redesign|rewrite|re-?architect|implement (the|a|all)|build (the|a|an|all)|whole (app|project|codebase|system)|all of (these|them|it))\b/i.test(t)
+}
+
+let largeSent = false
+let lastCtx = 0
+
+// ---------------------------------------------------------------------------
 // Helper model guard: the rules' helper models, kept before a helper starts.
 
 let modelGuardOn = true
@@ -3213,6 +3241,7 @@ export const register: Register = on => {
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
     modelGuardOn = (await $.store.get('models')) !== false
+    largeSent = false
     const storedBudget = await $.store.get('budget').catch(() => undefined)
     defaultBudget = storedBudget === null ? undefined : typeof storedBudget === 'number' && storedBudget > 0 ? storedBudget : undefined
     sessionId = (await $.session.id().catch(() => undefined)) ?? `session-${Date.now()}`
@@ -3240,8 +3269,24 @@ export const register: Register = on => {
   on('prompt.context', async ($, e, next) => {
     const smart = (await $.store.get('smart').catch(() => undefined)) !== false
     if (!smart) return next(e)
-    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: MUKA_RULES }] })
+    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: MUKA_CORE }] })
   })
+
+  // A prompt that looks large brings the full large-task steps with it, once
+  // per conversation (again after a compaction).
+  on('prompt.submit', async ($, e, next) => {
+    try {
+      if (isSmart && !largeSent && e.command === undefined && e.isMeta !== true && looksLarge(e.text)) {
+        largeSent = true
+        return next({ ...e, context: [...(e.context ?? []), `Muka: this looks like a large task. The full steps from the coordination rules:
+
+${MUKA_LARGE}`] })
+      }
+    } catch {
+      // Best effort: the prompt goes in as typed.
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
 
   // Closing the panel by hand closes it for this chat only; Savvy is on in
   // every chat unless /savvy off says otherwise.
@@ -3507,6 +3552,11 @@ export const register: Register = on => {
       costUsd: e.cost?.usd ?? m.costUsd,
     }))
     await checkBudget($).catch(() => undefined)
+    // A big drop in context is a compaction: the large-task steps may be gone with it.
+    if (ctx.percent !== undefined) {
+      if (lastCtx - ctx.percent >= 25) largeSent = false
+      lastCtx = ctx.percent
+    }
     // A filling context: Main hears about it on its next tool result.
     if (nudgesOn) {
       const nudge = contextNudge(wasteState, ctx.percent)

@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { mergeMukaSettings, MUKA_RULES } from './register'
+import { mergeMukaSettings, MUKA_CORE, MUKA_LARGE, MUKA_RULES } from './register'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type On = Parameters<Body>[1]
@@ -117,7 +117,11 @@ test('smart: the rules join each new conversation while on; switching tells the 
   // On by default: the rules ride in the context, framed as the user's.
   const withRules = (await $.prompt.context({ blocks: [{ name: 'currentDate', text: 'today' }] } as never)) as { blocks: { name: string; text: string }[] }
   expect(withRules.blocks.map(b => b.name)).toEqual(['currentDate', 'mukaRules'])
-  expect(withRules.blocks[1]!.text).toBe(MUKA_RULES)
+  // The core: the large-task details are left for a prompt that looks large.
+  expect(withRules.blocks[1]!.text).toBe(MUKA_CORE)
+  expect(MUKA_CORE.length).toBeLessThan(MUKA_RULES.length - 400)
+  expect(MUKA_CORE).toMatch(/## Large tasks\n\nFor an L task/)
+  expect(MUKA_LARGE).toMatch(/^## Large tasks: plan, then swarm[\s\S]*Keep PLAN\.md current/)
   expect(MUKA_RULES).toMatch(/^These are the user's coordination rules, added by Muka/)
   expect(MUKA_RULES).toMatch(/## Size every task first/)
 

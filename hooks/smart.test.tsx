@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { contextNudge, guardModel, newWasteState, WASTE_BIG, wasteCheck } from './register'
+import { contextNudge, guardModel, looksLarge, newWasteState, WASTE_BIG, wasteCheck } from './register'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type On = Parameters<Body>[1]
@@ -112,4 +112,25 @@ test('a helper asking for the wrong model is started on the right one, and marke
   await $.command.run({ command: 'muka', args: 'models off' } as never)
   await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'opus' } as never)
   expect(asked).toEqual(['haiku', 'opus'])
+})
+
+test('a prompt that looks large brings the full large-task steps, once', async ($, on) => {
+  engine(on)
+  on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
+  await $.session.start({ cwd: 'C:\work', surface: 'terminal', isInteractive: true } as never)
+  const small = (await $.prompt.submit({ text: 'fix the typo in the header' } as never)) as { context?: string[] }
+  expect(small.context ?? []).toEqual([])
+  const big = (await $.prompt.submit({ text: 'start working on these one by one please' } as never)) as { context?: string[] }
+  expect(big.context!.some(c => /## Large tasks: plan, then swarm/.test(c))).toBe(true)
+  // Once per conversation.
+  const again = (await $.prompt.submit({ text: 'refactor the whole project' } as never)) as { context?: string[] }
+  expect(again.context ?? []).toEqual([])
+})
+
+test('looksLarge reads the size of a prompt', () => {
+  expect(looksLarge('fix the typo')).toBe(false)
+  expect(looksLarge('what does this function do?')).toBe(false)
+  expect(looksLarge('refactor the auth module')).toBe(true)
+  expect(looksLarge('do these:\n1. a\n2. b\n3. c')).toBe(true)
+  expect(looksLarge(Array(90).fill('word').join(' '))).toBe(true)
 })
