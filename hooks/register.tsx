@@ -1631,12 +1631,53 @@ const HELM_CSS =
   `.hn{font:600 15px ${FONT};fill:${H.text}}` +
   `.hs{font:13px ${FONT};fill:${H.mute}}` +
   `.hl{font:600 10.5px ${FONT};fill:${H.mute};letter-spacing:1.5px}` +
-  `.hb{font:800 16px ${FONT};fill:${H.cyan};letter-spacing:5px}` +
+  `.hb{font:900 17px ${FONT};fill:url(#brand);letter-spacing:6px}` +
+  `.chip{font:700 11px ${FONT}}` +
+  // Decorations that only make sense while moving start hidden.
+  `.travel,.shine{opacity:0}` +
   // Hover (the pictures are drawn interactive on the desktop): a node, row or tile lights up.
-  `.node,.row,.tile,.lane{transition:opacity .2s}` +
-  `.node:hover .dot{stroke-width:4}.node:hover .tag{font-weight:800}` +
-  `.row:hover{opacity:.7}.tile:hover .tbox{fill-opacity:.16;stroke-width:2}` +
+  `.node,.row,.tile,.lane,.gauge{transition:opacity .2s,scale .25s cubic-bezier(.3,1.5,.5,1)}` +
+  `.node,.tile,.gauge{transform-box:fill-box;transform-origin:center}` +
+  `.node:hover{scale:1.12}.node:hover .tag{font-weight:800}` +
+  `.gauge:hover{scale:1.08}` +
+  `.row:hover{opacity:.7}.tile:hover{scale:1.04}.tile:hover .tbox{stroke-width:2}` +
   `.lane:hover .track{stroke-opacity:.8}`
+
+// The colours Muka draws with, each with its own gradients.
+const HUES = [H.cyan, H.green, H.amber, H.violet, H.red, '#DB2777', '#2563EB', H.faint, H.text]
+const hid = (hue: string): string => hue.replace('#', '').toLowerCase()
+/** A gradient of one hue: n (a lit sphere), a (an arc), b (a bar), t (a tile). */
+const grad = (kind: 'n' | 'a' | 'b' | 't', hue: string): string => (HUES.includes(hue) ? `url(#${kind}-${hid(hue)})` : hue)
+
+const DEFS =
+  '<defs>' +
+  `<linearGradient id="brand" x1="0" x2="1"><stop offset="0" stop-color="${H.cyan}"/><stop offset=".6" stop-color="${H.violet}"/><stop offset="1" stop-color="#DB2777"/></linearGradient>` +
+  `<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F6F9FC"/></linearGradient>` +
+  `<radialGradient id="core" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#E3F7FB"/><stop offset="1" stop-color="#BCE9F3"/></radialGradient>` +
+  `<radialGradient id="aura" r=".5"><stop offset="0" stop-color="${H.cyan}" stop-opacity=".28"/><stop offset="1" stop-color="${H.cyan}" stop-opacity="0"/></radialGradient>` +
+  `<linearGradient id="shine" x1="0" x2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/><stop offset=".5" stop-color="#FFFFFF" stop-opacity=".75"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>` +
+  `<filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
+  `<filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0F172A" flood-opacity=".16"/></filter>` +
+  `<pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".9" fill="${H.line}"/></pattern>` +
+  HUES.map(
+    h =>
+      `<radialGradient id="n-${hid(h)}" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/><stop offset=".4" stop-color="${h}" stop-opacity=".8"/><stop offset="1" stop-color="${h}"/></radialGradient>` +
+      `<linearGradient id="a-${hid(h)}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${h}" stop-opacity=".45"/><stop offset="1" stop-color="${h}"/></linearGradient>` +
+      `<linearGradient id="b-${hid(h)}" x1="0" x2="1"><stop offset="0" stop-color="${h}" stop-opacity=".55"/><stop offset="1" stop-color="${h}"/></linearGradient>` +
+      `<linearGradient id="t-${hid(h)}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${h}" stop-opacity=".16"/><stop offset="1" stop-color="${h}" stop-opacity=".03"/></linearGradient>`,
+  ).join('') +
+  '</defs>'
+
+let clipSeq = 0
+/** A rounded bar with a shimmer running along it while it moves. */
+const shinyBar = (x: number, y: number, w: number, h: number, fill: string, extra = ''): string => {
+  const id = `c${++clipSeq}`
+  return (
+    `<clipPath id="${id}"><rect x="${x.toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${h}" rx="${h / 2}"/></clipPath>` +
+    `<rect class="grow" style="${extra}" x="${x.toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${h}" rx="${h / 2}" fill="${fill}"/>` +
+    (w > 24 ? `<g clip-path="url(#${id})"><rect class="shine" style="--w:${(w + 40).toFixed(0)}px" x="${(x - 40).toFixed(1)}" y="${y}" width="40" height="${h}" fill="url(#shine)"/></g>` : '')
+  )
+}
 
 /**
  * Motion, only for people who have not asked their system to reduce motion,
@@ -1666,6 +1707,19 @@ const MOTION_CSS =
   `.rise{animation:mk-rise .5s ease-out both}` +
   `.grow{transform-box:fill-box;transform-origin:left;animation:mk-grow .8s cubic-bezier(.2,.8,.2,1) both}` +
   `.pop{transform-box:fill-box;transform-origin:center;animation:mk-pop .45s cubic-bezier(.3,1.4,.5,1) both}` +
+  `@keyframes mk-travel{0%{opacity:0;translate:0 0}15%,80%{opacity:1}100%{opacity:0;translate:var(--dx) var(--dy)}}` +
+  `@keyframes mk-twinkle{50%{opacity:.12}}` +
+  `@keyframes mk-shine{from{translate:0 0}to{translate:var(--w) 0}}` +
+  `@keyframes mk-halo{50%{opacity:.9;scale:1.18}}` +
+  `@keyframes mk-fade{from{opacity:0}}` +
+  `@keyframes mk-wobble{50%{translate:0 -2px}}` +
+  `.travel{animation:mk-travel 1.9s ease-in-out infinite}` +
+  `.twinkle{animation:mk-twinkle 3.4s ease-in-out infinite}` +
+  `.shine{opacity:1;animation:mk-shine 2.8s ease-in-out infinite}` +
+  `.halo{transform-box:fill-box;transform-origin:center;opacity:.5;animation:mk-halo 2.6s ease-in-out infinite}` +
+  `.orbit-fast{transform-box:view-box;animation:mk-spin 3.5s linear infinite}` +
+  `.fade{animation:mk-fade .6s ease-out both}` +
+  `.float{animation:mk-wobble 3s ease-in-out infinite}` +
   `}`
 
 /** Whether Muka's pictures move (/muka motion on|off); a reduce-motion system setting always wins. */
@@ -1681,8 +1735,9 @@ const helmHue = (s: SubAgentStatus | 'stuck'): string =>
 const card = (W: number, Hh: number, body: string, stroke: string = H.line): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}">` +
   `<style>${HELM_CSS}${motionOn ? MOTION_CSS : ''}</style>` +
-  `<rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="none" stroke="${stroke}" stroke-width="1.5"/>` +
-  body +
+  DEFS +
+  `<rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="url(#bg)" stroke="${stroke}" stroke-width="1.5"/>` +
+  `<g class="fade">${body}</g>` +
   `</svg>`
 
 /** The prompt's budget and spend, or undefined with no budget or no cost reading yet. */
@@ -1751,6 +1806,15 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
   const parts: string[] = []
   let y = 34
   parts.push(`<text x="20" y="${y}" class="hb">MUKA</text>`)
+  // A LIVE badge while Main works, IDLE otherwise.
+  const live = info.isWorking === true
+  const badgeHue = nl.isStuck ? H.red : live ? H.green : H.faint
+  parts.push(
+    `<g transform="translate(106 ${y - 13})"><rect width="${live ? 50 : 46}" height="18" rx="9" fill="${badgeHue}" fill-opacity=".12" stroke="${badgeHue}" stroke-opacity=".4"/>` +
+      `<circle class="${live ? 'pulse' : ''}" cx="10" cy="9" r="3.5" fill="${badgeHue}"/>` +
+      `${live ? `<circle class="ping" cx="10" cy="9" r="3.5" fill="none" stroke="${badgeHue}"/>` : ''}` +
+      `<text x="18" y="13" class="chip" style="fill:${badgeHue}">${nl.isStuck ? 'STUCK' : live ? 'LIVE' : 'IDLE'}</text></g>`,
+  )
   const clockText = info.turnStartedAt !== undefined ? `T+ ${mmss((info.isWorking ? now : (info.turnEndedAt ?? now)) - info.turnStartedAt)}` : 'T+ --:--'
   const moneyText = b ? `${usd(b.spent)} / ${usd(b.budget)}` : info.costUsd !== undefined ? `${usd(info.costUsd)} session` : ''
   const moneyHue = b && b.pct >= 1 ? H.red : b && b.pct >= 0.7 ? H.amber : H.mute
@@ -1759,8 +1823,8 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
     y += 12
     const w = W - 40
     const hue = b.pct >= 1 ? H.red : b.pct >= 0.7 ? H.amber : H.green
-    parts.push(`<rect x="20" y="${y}" width="${w}" height="3" rx="1.5" fill="${H.track}"/>`)
-    parts.push(`<rect class="grow" x="20" y="${y}" width="${Math.max(3, w * Math.min(1, b.pct)).toFixed(1)}" height="3" rx="1.5" fill="${hue}"/>`)
+    parts.push(`<rect x="20" y="${y}" width="${w}" height="4" rx="2" fill="${H.track}"/>`)
+    parts.push(shinyBar(20, y, Math.max(4, w * Math.min(1, b.pct)), 4, grad('b', hue)))
   }
   y += 30
   parts.push(`<text x="20" y="${y}" class="hn" style="fill:${nl.isStuck ? H.red : nl.isIdle ? H.mute : H.text}">${xml(clip(nl.text, 44))}</text>`)
@@ -1772,10 +1836,16 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
   const segW = (W - 40 - gap * (n - 1)) / n
   if (items.length > 0) {
     items.forEach((it, i) => {
-      const fill = it.status === 'completed' ? H.cyan : it.status === 'in_progress' ? H.violet : H.track
-      parts.push(
-        `<rect class="${it.status === 'in_progress' ? 'pulse' : 'pop'}" style="${it.status === 'in_progress' ? '' : delay(i, 0.04)}" x="${(20 + i * (segW + gap)).toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="9" rx="4.5" fill="${fill}"><title>${xml(`${i + 1}. ${it.content} (${it.status.replace('_', ' ')})`)}</title></rect>`,
-      )
+      const sx = 20 + i * (segW + gap)
+      const tip = `<title>${xml(`${i + 1}. ${it.content} (${it.status.replace('_', ' ')})`)}</title>`
+      if (it.status === 'in_progress') {
+        // The current step glows violet with a shimmer running through it.
+        parts.push(`<rect x="${sx.toFixed(1)}" y="${y - 2}" width="${segW.toFixed(1)}" height="13" rx="6.5" fill="${H.violet}" fill-opacity=".18" filter="url(#glow)" class="pulse"/>`)
+        parts.push(`<g>${tip}${shinyBar(sx, y, segW, 9, grad('b', H.violet))}</g>`)
+      } else {
+        const fill = it.status === 'completed' ? grad('b', H.cyan) : H.track
+        parts.push(`<rect class="pop" style="${delay(i, 0.04)}" x="${sx.toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="9" rx="4.5" fill="${fill}">${tip}</rect>`)
+      }
     })
   } else {
     parts.push(`<rect x="20" y="${y}" width="${W - 40}" height="9" rx="4.5" fill="${H.track}"/>`)
@@ -1821,10 +1891,19 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     pos[i] = { x: cx + r2 * Math.cos(angle), y: cy + r2 * Math.sin(angle), angle }
   })
   const parts: string[] = []
+  // A starfield behind the orbit: a faint dot grid and a few twinkling stars.
+  parts.push(`<circle cx="${cx}" cy="${cy}" r="${r2 + 24}" fill="url(#dots)" opacity=".7"/>`)
+  for (let k = 0; k < 16; k++) {
+    const a = k * 2.399 // the golden angle spreads them evenly
+    const rr = 26 + ((k * 37) % (r2 + 10))
+    const sx = cx + rr * Math.cos(a)
+    const sy = cy + rr * Math.sin(a)
+    parts.push(`<circle class="twinkle" style="${delay(k, 0.21)}" cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="${k % 3 === 0 ? 1.6 : 1}" fill="${k % 2 ? H.violet : H.cyan}" opacity=".55"/>`)
+  }
   // The rings turn slowly, the outer one the other way.
   const origin = `transform-origin:${cx}px ${cy}px`
-  parts.push(`<circle class="spin" style="${origin}" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="${H.line}" stroke-width="1.2" stroke-dasharray="3 5"/>`)
-  parts.push(`<circle class="spin-back" style="${origin}" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="${H.line}" stroke-width="1.2" stroke-dasharray="3 5"/>`)
+  parts.push(`<circle class="spin" style="${origin}" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="${H.cyan}" stroke-opacity=".28" stroke-width="1.2" stroke-dasharray="2 6"/>`)
+  parts.push(`<circle class="spin-back" style="${origin}" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="${H.violet}" stroke-opacity=".22" stroke-width="1.2" stroke-dasharray="2 7"/>`)
   rows.forEach((r, i) => {
     const p = parents[i]
     const from = p === undefined ? { x: cx, y: cy } : pos[p]!
@@ -1832,18 +1911,28 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const live = r.agent.status === 'running'
     const hue = stuck.has(r.agent.id) ? H.red : helmHue(r.agent.status)
     parts.push(
-      `<line${live ? ' class="flow"' : ''} x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}" stroke="${hue}" stroke-opacity="${live ? 0.9 : 0.5}" stroke-width="1.5"${live ? ' stroke-dasharray="5 4"' : ''}/>`,
+      `<line${live ? ' class="flow"' : ''} x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}" stroke="${hue}" stroke-opacity="${live ? 0.9 : 0.45}" stroke-width="${live ? 2 : 1.5}" stroke-linecap="round"${live ? ' stroke-dasharray="5 4"' : ''}/>`,
     )
+    // Work travelling out to a working helper: glowing sparks along its link.
+    if (live) {
+      const dx = (to.x - from.x).toFixed(1)
+      const dy = (to.y - from.y).toFixed(1)
+      for (let k = 0; k < 3; k++) {
+        parts.push(`<circle class="travel" style="--dx:${dx}px;--dy:${dy}px;animation-delay:${(k * 0.63).toFixed(2)}s" cx="${from.x.toFixed(1)}" cy="${from.y.toFixed(1)}" r="2.6" fill="${hue}" filter="url(#glow)"/>`)
+      }
+    }
   })
-  // Main: the core breathes while it works, and a small comet circles it.
+  // Main: an aura, a glassy core that breathes while it works, a comet and a spinning arc.
+  parts.push(`<circle class="${info.isWorking ? 'halo' : ''}" cx="${cx}" cy="${cy}" r="58" fill="url(#aura)"/>`)
   if (info.isWorking) {
-    parts.push(`<g class="comet" style="${origin}"><circle cx="${cx + 42}" cy="${cy}" r="3.5" fill="${H.cyan}"/><circle cx="${cx + 40}" cy="${cy - 8}" r="2.2" fill="${H.cyan}" fill-opacity=".45"/><circle cx="${cx + 36}" cy="${cy - 15}" r="1.4" fill="${H.cyan}" fill-opacity=".2"/></g>`)
+    parts.push(`<g class="comet" style="${origin}"><circle cx="${cx + 42}" cy="${cy}" r="3.5" fill="${H.cyan}" filter="url(#glow)"/><circle cx="${cx + 40}" cy="${cy - 8}" r="2.2" fill="${H.cyan}" fill-opacity=".45"/><circle cx="${cx + 36}" cy="${cy - 15}" r="1.4" fill="${H.cyan}" fill-opacity=".2"/></g>`)
+    parts.push(`<circle class="orbit-fast" style="${origin}" cx="${cx}" cy="${cy}" r="35" fill="none" stroke="url(#brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34 186"/>`)
     parts.push(`<circle class="ping" cx="${cx}" cy="${cy}" r="30" fill="none" stroke="${H.cyan}" stroke-width="1.5"/>`)
   }
   parts.push(
     `<g class="node"><title>${xml(`Main · ${shortModel(info.model)} · ${mainLine(info)}`)}</title>` +
-      `<circle class="${info.isWorking ? 'breathe dot' : 'dot'}" cx="${cx}" cy="${cy}" r="30" fill="${H.core}" stroke="${H.cyan}" stroke-width="2"/>` +
-      `<text class="ht tag" x="${cx}" y="${cy + 1}" text-anchor="middle" style="font-weight:800;font-size:13px">MAIN</text>` +
+      `<circle class="${info.isWorking ? 'breathe dot' : 'dot'}" cx="${cx}" cy="${cy}" r="30" fill="url(#core)" stroke="${H.cyan}" stroke-width="2" filter="url(#soft)"/>` +
+      `<text class="ht tag" x="${cx}" y="${cy + 1}" text-anchor="middle" style="font-weight:900;font-size:13px;fill:url(#brand);letter-spacing:1px">MAIN</text>` +
       `<text x="${cx}" y="${cy + 15}" class="hs" text-anchor="middle" style="font-size:10px">${xml(shortModel(info.model))}</text></g>`,
   )
   rows.forEach((r, i) => {
@@ -1851,15 +1940,20 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const { x, y } = pos[i]!
     const isStuck = stuck.has(a.id)
     const hue = isStuck ? H.red : helmHue(a.status)
-    const size = r.depth === 0 ? 10 : 7
+    const size = r.depth === 0 ? 13 : 9
     const hollow = a.status === 'stopped'
     const live = a.status === 'running'
     const tip = `${a.type} · ${a.model} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${plural(a.stepCount ?? 0, 'step')} · ${duration((a.endedAt ?? now) - a.startedAt)}${estimateUsd(a.usage, a.model) > 0 ? ` · ${usd(estimateUsd(a.usage, a.model))}` : ''}`
     parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title>`)
-    if (live) parts.push(`<circle class="ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="none" stroke="${hue}" stroke-width="1.5"/>`)
+    if (live) {
+      parts.push(`<circle class="halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size + 7}" fill="${hue}" fill-opacity=".14"/>`)
+      parts.push(`<circle class="ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="none" stroke="${hue}" stroke-width="1.5"/>`)
+    }
     parts.push(
-      `<circle class="dot${live ? (isStuck ? ' pulse-fast' : ' pulse') : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : hue}" stroke="${hue}" stroke-width="2"/>`,
+      `<circle class="dot${live && isStuck ? ' pulse-fast' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : grad('n', hue)}" stroke="${hue}" stroke-width="2" filter="url(#soft)"/>`,
     )
+    // The helper's own icon inside its sphere.
+    parts.push(`<text x="${x.toFixed(1)}" y="${(y + size * 0.36).toFixed(1)}" text-anchor="middle" style="font-size:${(size * 1.05).toFixed(1)}px">${agentIcon(a.type)}</text>`)
     const right = x >= cx
     const lx = x + (right ? size + 5 : -(size + 5))
     const anchor = right ? 'start' : 'end'
@@ -1885,13 +1979,19 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
 const ringGauge = (gx: number, gy: number, r: number, value: number | undefined, label: string, hue: string): string => {
   const len = 2 * Math.PI * r
   const sw = Math.max(5, Math.round(r / 4.5))
-  let out = `<circle cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${H.track}" stroke-width="${sw}"/>`
+  let out = `<g class="gauge"><title>${xml(`${label.toLowerCase()}: ${value === undefined ? 'no reading yet' : `${Math.round(value)}%`}`)}</title>`
+  out += `<circle cx="${gx}" cy="${gy}" r="${r + sw}" fill="${hue}" fill-opacity=".05"/>`
+  out += `<circle cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${H.track}" stroke-width="${sw}"/>`
   if (value !== undefined && value > 0) {
-    const arc = ((len * Math.min(100, value)) / 100).toFixed(1)
-    out += `<circle class="sweep" style="--d:${arc}" cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${hue}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${arc} ${len.toFixed(1)}" transform="rotate(-90 ${gx} ${gy})"><title>${xml(`${label.toLowerCase()}: ${Math.round(value)}%`)}</title></circle>`
+    const v = Math.min(100, value)
+    const arc = ((len * v) / 100).toFixed(1)
+    out += `<circle class="sweep" style="--d:${arc}" cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${grad('a', hue)}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${arc} ${len.toFixed(1)}" transform="rotate(-90 ${gx} ${gy})"/>`
+    // A glowing bead at the arc's tip, appearing as the sweep lands.
+    const t = -Math.PI / 2 + (2 * Math.PI * v) / 100
+    out += `<circle class="pop" style="animation-delay:.85s" cx="${(gx + r * Math.cos(t)).toFixed(1)}" cy="${(gy + r * Math.sin(t)).toFixed(1)}" r="${(sw / 2 + 1.2).toFixed(1)}" fill="#FFFFFF" stroke="${hue}" stroke-width="2" filter="url(#glow)"/>`
   }
-  out += `<text x="${gx}" y="${gy + 5}" class="hn" text-anchor="middle" style="font-size:${r >= 30 ? 16 : 13.5}px">${value === undefined ? '–' : `${Math.round(value)}%`}</text>`
-  out += `<text x="${gx}" y="${gy + r + 18}" class="hl" text-anchor="middle">${label}</text>`
+  out += `<text x="${gx}" y="${gy + 5}" class="hn" text-anchor="middle" style="font-weight:800;font-size:${r >= 30 ? 17 : 14}px;fill:${value === undefined ? H.faint : hue}">${value === undefined ? '–' : `${Math.round(value)}%`}</text>`
+  out += `<text x="${gx}" y="${gy + r + sw + 14}" class="hl" text-anchor="middle">${label}</text></g>`
   return out
 }
 
@@ -1924,16 +2024,25 @@ const feedHue = (key: string): string => {
 const feedBody = (feed: ActivityItem[], y0: number, max: number): { parts: string; height: number; items: ActivityItem[] } => {
   const items = [...feed].reverse().slice(0, max)
   const parts: string[] = []
+  // A small timeline: a rail, a dot per step (the newest pulsing), a coloured chip for who.
+  if (items.length > 1) parts.push(`<line x1="64" y1="${y0 - 4}" x2="64" y2="${y0 - 4 + (items.length - 1) * 24}" stroke="${H.line}" stroke-width="2" stroke-linecap="round"/>`)
   items.forEach((s, i) => {
-    const y = y0 + i * 22
+    const y = y0 + i * 24
     const who = s.outcome ? H.red : feedHue(s.agentId ?? s.agent)
+    const hue = who === H.text ? H.cyan : who
+    const name = clip(s.agent, 11)
+    const cw = name.length * 6.6 + 14
     parts.push(
-      `<text x="20" y="${y}" class="hs row rise" style="${i === 0 ? `fill:${H.text};` : ''}${delay(i, 0.08)}">` +
-        `<tspan style="fill:${H.faint}">${xml(clock(s.at).slice(0, 5))}</tspan>  <tspan style="fill:${who};font-weight:600">${xml(clip(s.agent, 12))}</tspan> · ${xml(clip(stepText(s), 36))}</text>`,
+      `<g class="row rise" style="${delay(i, 0.08)}"><title>${xml(`${clock(s.at)} ${s.agent}: ${stepText(s)}`)}</title>` +
+        `<text x="20" y="${y}" class="hs" style="fill:${H.faint};font-size:11.5px">${xml(clock(s.at).slice(0, 5))}</text>` +
+        `<circle class="${i === 0 ? 'pulse' : ''}" cx="64" cy="${y - 4}" r="${i === 0 ? 4.5 : 3.5}" fill="${hue}"${i === 0 ? ' filter="url(#glow)"' : ''}/>` +
+        `<rect x="76" y="${y - 13}" width="${cw.toFixed(1)}" height="18" rx="9" fill="${hue}" fill-opacity=".12"/>` +
+        `<text x="${(76 + cw / 2).toFixed(1)}" y="${y}" class="chip" text-anchor="middle" style="fill:${hue}">${xml(name)}</text>` +
+        `<text x="${(82 + cw).toFixed(1)}" y="${y}" class="hs" style="${i === 0 ? `fill:${H.text};` : ''}font-size:12.5px">${xml(clip(stepText(s), Math.max(10, Math.floor((HELM_W - 102 - cw) / 6.4))))}</text></g>`,
     )
   })
   if (items.length === 0) parts.push(`<text x="20" y="${y0}" class="hs" style="fill:${H.faint}">Nothing has run since your last prompt.</text>`)
-  return { parts: parts.join(''), height: Math.max(1, items.length) * 22, items }
+  return { parts: parts.join(''), height: Math.max(1, items.length) * 24, items }
 }
 
 /** The Orbit on its own card, with its legend. */
@@ -2014,7 +2123,7 @@ export const spendBar = (spend: Record<string, number> | undefined, budget: numb
   parts.push(`<rect x="20" y="20" width="${w}" height="14" rx="7" fill="${H.track}"/>`)
   for (const [m, v] of entries) {
     const segW = (w * v) / scale
-    parts.push(`<rect class="grow" x="${x.toFixed(1)}" y="20" width="${Math.max(2, segW).toFixed(1)}" height="14" fill="${hue[m] ?? H.cyan}"><title>${xml(`${m}: ${usd(v)}`)}</title></rect>`)
+    parts.push(`<rect class="grow" x="${x.toFixed(1)}" y="20" width="${Math.max(2, segW).toFixed(1)}" height="14" fill="${grad('b', hue[m] ?? H.cyan)}"><title>${xml(`${m}: ${usd(v)}`)}</title></rect>`)
     x += segW
   }
   if (budget) {
@@ -2066,7 +2175,7 @@ export const barsCard = (title: string, rows: BarRow[], max?: number, empty = 'N
     parts.push(`<g class="row"><title>${xml(`${r.label}: ${r.text}`)}</title>`)
     parts.push(`<text x="20" y="${y + 9}" class="ht" style="font-size:12.5px">${xml(clip(r.label, 17))}</text>`)
     parts.push(`<rect x="${LABEL + 20}" y="${y}" width="${track}" height="12" rx="6" fill="${H.track}"/>`)
-    parts.push(`<rect class="grow" style="${delay(i, 0.07)}" x="${LABEL + 20}" y="${y}" width="${Math.min(track, w).toFixed(1)}" height="12" rx="6" fill="${r.hue ?? H.cyan}"/>`)
+    parts.push(shinyBar(LABEL + 20, y, Math.min(track, w), 12, grad('b', r.hue ?? H.cyan), delay(i, 0.07)))
     parts.push(`<text x="${W - 20}" y="${y + 10}" class="hs" text-anchor="end" style="font-size:12px">${xml(r.text)}</text></g>`)
   })
   if (rows.length === 0) parts.push(`<text x="20" y="60" class="hs" style="fill:${H.faint}">${xml(empty)}</text>`)
@@ -2090,8 +2199,10 @@ export const tilesCard = (title: string, tiles: Tile[]): Card => {
     const y = 44 + Math.floor(i / cols) * (th + gap)
     const hue = t.isOn ? t.hue : H.faint
     parts.push(`<g class="tile pop" style="${delay(i, 0.07)}"><title>${xml(`${t.label}: ${t.value}`)}</title>`)
-    parts.push(`<rect class="tbox" x="${x.toFixed(1)}" y="${y}" width="${tw.toFixed(1)}" height="${th}" rx="12" fill="${t.isOn ? hue : '#FFFFFF'}" fill-opacity="${t.isOn ? 0.08 : 0}" stroke="${t.isOn ? hue : H.line}" stroke-width="1.2"/>`)
-    parts.push(`<text x="${(x + 12).toFixed(1)}" y="${y + 26}" style="font-size:16px">${t.icon}</text>`)
+    parts.push(`<rect class="tbox" x="${x.toFixed(1)}" y="${y}" width="${tw.toFixed(1)}" height="${th}" rx="14" fill="${t.isOn ? grad('t', hue) : '#FFFFFF'}" stroke="${t.isOn ? hue : H.line}" stroke-opacity="${t.isOn ? 0.55 : 1}" stroke-width="1.2" filter="url(#soft)"/>`)
+    // The icon floats in a soft bubble.
+    parts.push(`<g class="${t.isOn ? 'float' : ''}" style="${delay(i, 0.4)}"><circle cx="${(x + 22).toFixed(1)}" cy="${y + 21}" r="13" fill="${t.isOn ? hue : H.faint}" fill-opacity=".14"/>`)
+    parts.push(`<text x="${(x + 22).toFixed(1)}" y="${y + 27}" text-anchor="middle" style="font-size:15px">${t.icon}</text></g>`)
     parts.push(`<text x="${(x + tw - 12).toFixed(1)}" y="${y + 30}" class="hn" text-anchor="end" style="font-size:20px;fill:${t.isOn ? hue : H.faint}">${xml(t.value)}</text>`)
     parts.push(`<text x="${(x + 12).toFixed(1)}" y="${y + 56}" class="hs" style="font-size:11.5px">${xml(t.label)}</text></g>`)
   })
