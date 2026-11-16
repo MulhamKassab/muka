@@ -1656,10 +1656,7 @@ const DEFS =
   `<radialGradient id="core" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#E3F7FB"/><stop offset="1" stop-color="#BCE9F3"/></radialGradient>` +
   `<radialGradient id="aura" r=".5"><stop offset="0" stop-color="${H.cyan}" stop-opacity=".28"/><stop offset="1" stop-color="${H.cyan}" stop-opacity="0"/></radialGradient>` +
   `<linearGradient id="shine" x1="0" x2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/><stop offset=".5" stop-color="#FFFFFF" stop-opacity=".75"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>` +
-  `<filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
-  `<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>` +
   `<linearGradient id="spark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${H.violet}" stop-opacity=".32"/><stop offset="1" stop-color="${H.cyan}" stop-opacity="0"/></linearGradient>` +
-  `<filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0F172A" flood-opacity=".16"/></filter>` +
   `<pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".9" fill="${H.line}"/></pattern>` +
   HUES.map(
     h =>
@@ -1742,7 +1739,7 @@ const helmHue = (s: SubAgentStatus | 'stuck'): string =>
   s === 'stuck' ? H.red : s === 'running' ? H.cyan : s === 'done' ? H.green : s === 'stopped' ? H.amber : H.red
 
 // How large a picture may grow: it fills the panel's width up to this, keeping its shape.
-const PIC_MAX_W = 560
+const PIC_MAX_W = 520
 
 /**
  * A Muka picture, drawn straight on the panel: no frame or background of its
@@ -1832,7 +1829,8 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
   const b = budgetState(info, budget)
   const p = planProgress(info.plan)
   const parts: string[] = []
-  let y = 34
+  // Compact: the brand row, the now line with where the plan stands, the phase bar.
+  let y = 24
   parts.push(`<text x="20" y="${y}" class="hb">MUKA</text>`)
   // A sheen sweeps across the wordmark.
   parts.push(
@@ -1849,23 +1847,24 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
       `<text x="18" y="13" class="chip" style="fill:${badgeHue}">${nl.isStuck ? 'STUCK' : live ? 'LIVE' : 'IDLE'}</text></g>`,
   )
   const clockText = info.turnStartedAt !== undefined ? `T+ ${mmss((info.isWorking ? now : (info.turnEndedAt ?? now)) - info.turnStartedAt)}` : 'T+ --:--'
-  const moneyText = b ? `${usd(b.spent)} / ${usd(b.budget)}` : info.costUsd !== undefined ? `${usd(info.costUsd)} session` : ''
+  const moneyText = b ? `${usd(b.spent)} / ${usd(b.budget)}` : info.costUsd !== undefined ? usd(info.costUsd) : ''
   const moneyHue = b && b.pct >= 1 ? H.red : b && b.pct >= 0.7 ? H.amber : H.mute
   parts.push(`<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="fill:${moneyHue}">${xml(`${clockText}${moneyText ? ` · ${moneyText}` : ''}`)}</text>`)
   if (b) {
-    y += 12
     const w = W - 40
     const hue = b.pct >= 1 ? H.red : b.pct >= 0.7 ? H.amber : H.green
-    parts.push(`<rect x="20" y="${y}" width="${w}" height="4" rx="2" fill="${H.track}"/>`)
-    parts.push(shinyBar(20, y, Math.max(4, w * Math.min(1, b.pct)), 4, grad('b', hue)))
+    parts.push(`<rect x="20" y="${y + 7}" width="${w}" height="3" rx="1.5" fill="${H.track}"/>`)
+    parts.push(shinyBar(20, y + 7, Math.max(3, w * Math.min(1, b.pct)), 3, grad('b', hue)))
   }
-  y += 30
-  parts.push(`<text x="20" y="${y}" class="hn" style="fill:${nl.isStuck ? H.red : nl.isIdle ? H.mute : H.text}">${xml(clip(nl.text, 44))}</text>`)
-  y += 18
+  y += 25
+  const where = p ? `${p.done}/${p.total}${p.done === p.total ? ' ✓' : ''}` : ''
+  parts.push(`<text x="20" y="${y}" class="hn" style="font-size:14px;fill:${nl.isStuck ? H.red : nl.isIdle ? H.mute : H.text}">${xml(clip(nl.text, where ? 40 : 46))}</text>`)
+  if (where) parts.push(`<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="font-weight:700;fill:${H.violet}">${xml(where)}</text>`)
+  y += 10
   // Phase bar: one segment per task-list step, the current one violet.
   const items = (info.plan ?? []).slice(0, 12)
   const n = Math.max(1, items.length)
-  const gap = 6
+  const gap = 5
   const segW = (W - 40 - gap * (n - 1)) / n
   if (items.length > 0) {
     items.forEach((it, i) => {
@@ -1873,24 +1872,18 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
       const tip = `<title>${xml(`${i + 1}. ${it.content} (${it.status.replace('_', ' ')})`)}</title>`
       if (it.status === 'in_progress') {
         // The current step glows violet with a shimmer running through it.
-        parts.push(`<rect x="${sx.toFixed(1)}" y="${y - 2}" width="${segW.toFixed(1)}" height="13" rx="6.5" fill="${H.violet}" fill-opacity=".18" filter="url(#glow)" class="pulse"/>`)
-        parts.push(`<g>${tip}${shinyBar(sx, y, segW, 9, grad('b', H.violet))}</g>`)
+        parts.push(`<rect x="${sx.toFixed(1)}" y="${y - 2}" width="${segW.toFixed(1)}" height="11" rx="5.5" fill="${H.violet}" fill-opacity=".18" class="pulse"/>`)
+        parts.push(`<g>${tip}${shinyBar(sx, y, segW, 7, grad('b', H.violet))}</g>`)
       } else {
         const fill = it.status === 'completed' ? grad('b', H.cyan) : H.track
-        parts.push(`<rect class="pop" style="${delay(i, 0.04)}" x="${sx.toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="9" rx="4.5" fill="${fill}">${tip}</rect>`)
+        parts.push(`<rect class="pop" style="${delay(i, 0.04)}" x="${sx.toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="7" rx="3.5" fill="${fill}">${tip}</rect>`)
       }
     })
   } else {
-    parts.push(`<rect x="20" y="${y}" width="${W - 40}" height="9" rx="4.5" fill="${H.track}"/>`)
+    parts.push(`<rect x="20" y="${y}" width="${W - 40}" height="7" rx="3.5" fill="${H.track}"/>`)
   }
-  y += 32
-  const where = p
-    ? `${p.done} / ${p.total} steps${p.current ? ` · now: ${p.current}` : p.done === p.total ? ' · all done' : ''}`
-    : info.prompt
-      ? `task: ${info.prompt}`
-      : 'no task yet'
-  parts.push(`<text x="20" y="${y}" class="hs">${xml(clip(where, 50))}</text>`)
-  return { parts: parts.join(''), height: y + 18, isStuck: nl.isStuck }
+  y += 7
+  return { parts: parts.join(''), height: y + 10, isStuck: nl.isStuck }
 }
 
 /** The Bridge strip, the head card on every view but the Bridge. */
@@ -1903,7 +1896,7 @@ export const bridgeStrip = (info: MainInfo, list: SubAgent[], budget: number | u
 const ORBIT_MAX = 16
 
 /** The orbit's own marks around (cx, cy): Main at the centre, helpers on the inner ring, nested helpers outside. */
-const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy: number, r1: number, r2: number, nameMax: number): string => {
+const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy: number, r1: number, r2: number, nameMax: number, maxX = HELM_W): string => {
   const rows = treeRows(list).slice(0, ORBIT_MAX)
   const parents = treeParents(rows)
   const stuck = new Set(stuckAgents(list, now).map(s => s.agent.id))
@@ -1951,20 +1944,20 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       const dx = (to.x - from.x).toFixed(1)
       const dy = (to.y - from.y).toFixed(1)
       for (let k = 0; k < 3; k++) {
-        parts.push(`<circle class="travel" style="--dx:${dx}px;--dy:${dy}px;animation-delay:${(k * 0.63).toFixed(2)}s" cx="${from.x.toFixed(1)}" cy="${from.y.toFixed(1)}" r="2.6" fill="${hue}" filter="url(#glow)"/>`)
+        parts.push(`<circle class="travel" style="--dx:${dx}px;--dy:${dy}px;animation-delay:${(k * 0.63).toFixed(2)}s" cx="${from.x.toFixed(1)}" cy="${from.y.toFixed(1)}" r="2.6" fill="${hue}"/>`)
       }
     }
   })
   // Main: an aura, a glassy core that breathes while it works, a comet and a spinning arc.
   parts.push(`<circle class="${info.isWorking ? 'halo' : ''}" cx="${cx}" cy="${cy}" r="58" fill="url(#aura)"/>`)
   if (info.isWorking) {
-    parts.push(`<g class="comet" style="${origin}"><circle cx="${cx + 42}" cy="${cy}" r="3.5" fill="${H.cyan}" filter="url(#glow)"/><circle cx="${cx + 40}" cy="${cy - 8}" r="2.2" fill="${H.cyan}" fill-opacity=".45"/><circle cx="${cx + 36}" cy="${cy - 15}" r="1.4" fill="${H.cyan}" fill-opacity=".2"/></g>`)
+    parts.push(`<g class="comet" style="${origin}"><circle cx="${cx + 42}" cy="${cy}" r="3.5" fill="${H.cyan}"/><circle cx="${cx + 40}" cy="${cy - 8}" r="2.2" fill="${H.cyan}" fill-opacity=".45"/><circle cx="${cx + 36}" cy="${cy - 15}" r="1.4" fill="${H.cyan}" fill-opacity=".2"/></g>`)
     parts.push(`<circle class="orbit-fast" style="${origin}" cx="${cx}" cy="${cy}" r="35" fill="none" stroke="url(#brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34 186"/>`)
     parts.push(`<circle class="ping" cx="${cx}" cy="${cy}" r="30" fill="none" stroke="${H.cyan}" stroke-width="1.5"/>`)
   }
   parts.push(
     `<g class="node"><title>${xml(`Main · ${shortModel(info.model)} · ${mainLine(info)}`)}</title>` +
-      `<circle class="${info.isWorking ? 'breathe dot' : 'dot'}" cx="${cx}" cy="${cy}" r="30" fill="url(#core)" stroke="${H.cyan}" stroke-width="2" filter="url(#soft)"/>` +
+      `<circle class="${info.isWorking ? 'breathe dot' : 'dot'}" cx="${cx}" cy="${cy}" r="30" fill="url(#core)" stroke="${H.cyan}" stroke-width="2"/>` +
       `<text class="ht tag" x="${cx}" y="${cy + 1}" text-anchor="middle" style="font-weight:900;font-size:13px;fill:url(#brand);letter-spacing:1px">MAIN</text>` +
       `<text x="${cx}" y="${cy + 15}" class="hs" text-anchor="middle" style="font-size:10px">${xml(shortModel(info.model))}</text></g>`,
   )
@@ -1983,7 +1976,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       parts.push(`<circle class="ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="none" stroke="${hue}" stroke-width="1.5"/>`)
     }
     parts.push(
-      `<circle class="dot${live && isStuck ? ' pulse-fast' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : grad('n', hue)}" stroke="${hue}" stroke-width="2" filter="url(#soft)"/>`,
+      `<circle class="dot${live && isStuck ? ' pulse-fast' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : grad('n', hue)}" stroke="${hue}" stroke-width="2"/>`,
     )
     // The helper's own icon inside its sphere.
     parts.push(`<text x="${x.toFixed(1)}" y="${(y + size * 0.36).toFixed(1)}" text-anchor="middle" style="font-size:${(size * 1.05).toFixed(1)}px">${agentIcon(a.type)}</text>`)
@@ -2001,7 +1994,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const lx = x + (right ? size + 5 : -(size + 5))
     const anchor = right ? 'start' : 'end'
     // Room on this side, in characters at each line's size.
-    const px = right ? HELM_W - 6 - lx : lx - 6
+    const px = right ? maxX - 4 - lx : lx - 6
     const fit = (perChar: number) => Math.max(4, Math.floor(px / perChar))
     const cost = estimateUsd(a.usage, a.model)
     const took = duration((a.endedAt ?? now) - a.startedAt)
@@ -2031,7 +2024,7 @@ const ringGauge = (gx: number, gy: number, r: number, value: number | undefined,
     out += `<circle class="sweep" style="--d:${arc}" cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${grad('a', hue)}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${arc} ${len.toFixed(1)}" transform="rotate(-90 ${gx} ${gy})"/>`
     // A glowing bead at the arc's tip, appearing as the sweep lands.
     const t = -Math.PI / 2 + (2 * Math.PI * v) / 100
-    out += `<circle class="pop" style="animation-delay:.85s" cx="${(gx + r * Math.cos(t)).toFixed(1)}" cy="${(gy + r * Math.sin(t)).toFixed(1)}" r="${(sw / 2 + 1.2).toFixed(1)}" fill="#FFFFFF" stroke="${hue}" stroke-width="2" filter="url(#glow)"/>`
+    out += `<circle class="pop" style="animation-delay:.85s" cx="${(gx + r * Math.cos(t)).toFixed(1)}" cy="${(gy + r * Math.sin(t)).toFixed(1)}" r="${(sw / 2 + 1.2).toFixed(1)}" fill="#FFFFFF" stroke="${hue}" stroke-width="2"/>`
   }
   out += `<text x="${gx}" y="${gy + 5}" class="hn" text-anchor="middle" style="font-weight:800;font-size:${r >= 30 ? 17 : 14}px;fill:${value === undefined ? H.faint : hue}">${value === undefined ? '–' : `${Math.round(value)}%`}</text>`
   out += `<text x="${gx}" y="${gy + r + sw + 14}" class="hl" text-anchor="middle">${label}</text></g>`
@@ -2078,7 +2071,7 @@ const feedBody = (feed: ActivityItem[], y0: number, max: number): { parts: strin
     parts.push(
       `<g class="row rise" style="${delay(i, 0.08)}"><title>${xml(`${clock(s.at)} ${s.agent}: ${stepText(s)}`)}</title>` +
         `<text x="20" y="${y}" class="hs" style="fill:${H.faint};font-size:11.5px">${xml(clock(s.at).slice(0, 5))}</text>` +
-        `<circle class="${i === 0 ? 'pulse' : ''}" cx="64" cy="${y - 4}" r="${i === 0 ? 4.5 : 3.5}" fill="${hue}"${i === 0 ? ' filter="url(#glow)"' : ''}/>` +
+        `<circle class="${i === 0 ? 'pulse' : ''}" cx="64" cy="${y - 4}" r="${i === 0 ? 4.5 : 3.5}" fill="${hue}"${i === 0 ? '' : ''}/>` +
         `<rect x="76" y="${y - 13}" width="${cw.toFixed(1)}" height="18" rx="9" fill="${hue}" fill-opacity=".12"/>` +
         `<text x="${(76 + cw / 2).toFixed(1)}" y="${y}" class="chip" text-anchor="middle" style="fill:${hue}">${xml(name)}</text>` +
         `<text x="${(82 + cw).toFixed(1)}" y="${y}" class="hs" style="${i === 0 ? `fill:${H.text};` : ''}font-size:12.5px">${xml(clip(stepText(s), Math.max(10, Math.floor((HELM_W - 102 - cw) / 6.4))))}</text></g>`,
@@ -2135,19 +2128,20 @@ export const feedCard = (feed: ActivityItem[], max = 5): { source: string; alt: 
 export const bridgeCard = (info: MainInfo, list: SubAgent[], feed: ActivityItem[], budget: number | undefined, now = Date.now()): { source: string; alt: string } => {
   const W = HELM_W
   const head = stripBody(info, list, budget, now)
-  const top = head.height + 4
-  const orbitH = 290
-  const orbit = orbitBody(info, list, now, W / 2, top + orbitH / 2, 72, 118, 14)
-  const gaugeTop = top + orbitH + 6
+  // Compact, to fit the panel without scrolling: the orbit on the left with
+  // the three gauges stacked beside it, then the pace line and three steps.
+  const top = head.height
+  const midH = 208
+  const orbit = orbitBody(info, list, now, 152, top + midH / 2, 52, 84, 12, 334)
   const gauges = gaugeValues(info)
-    .map((g, i) => ringGauge(((2 * i + 1) * W) / 6, gaugeTop + 32, 28, g.value, g.label, g.hue))
+    .map((g, i) => ringGauge(362, top + 26 + i * 68, 18, g.value, g.label, g.hue))
     .join('')
-  const sparkTop = gaugeTop + 92
-  const spark = sparkBody(feed, info.isWorking === true, 20, sparkTop, W - 40, 46, now)
-  const feedTop = sparkTop + 70
+  const sparkTop = top + midH + 4
+  const spark = sparkBody(feed, info.isWorking === true, 20, sparkTop, W - 40, 34, now)
+  const feedTop = sparkTop + 44
   const divider = `<line x1="20" y1="${feedTop - 4}" x2="${W - 20}" y2="${feedTop - 4}" stroke="${H.line}"/>`
-  const f = feedBody(feed, feedTop + 20, 4)
-  const Hh = feedTop + 20 + f.height
+  const f = feedBody(feed, feedTop + 16, 3)
+  const Hh = feedTop + 8 + f.height
   const alt = clip(
     `${stripAlt(info, list, budget, now)} ${agentsAlt(info, list)} ${gaugeAlt(info)} ${spark.alt} Recent: ${f.items.map(s => `${s.agent} ${stepText(s)}`).join('; ') || 'none yet'}.`,
     3000,
@@ -2193,7 +2187,7 @@ const sparkBody = (feed: ActivityItem[], live: boolean, x: number, y: number, w:
     `<path class="fade" d="${area}" fill="url(#spark)"/>` +
     `<path class="draw" pathLength="1" stroke-dasharray="1" d="${d}" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><title>${xml(`${feed.length} steps since your last prompt`)}</title></path>` +
     (live ? `<circle class="ping" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="none" stroke="#DB2777"/>` : '') +
-    `<circle class="pop" style="animation-delay:1.4s" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#DB2777" stroke-width="2.2" filter="url(#glow)"/>`
+    `<circle class="pop" style="animation-delay:1.4s" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#DB2777" stroke-width="2.2"/>`
   return { parts, alt: `Pace: ${feed.length} steps, about ${rate.toFixed(1)} a minute.` }
 }
 
@@ -2286,7 +2280,7 @@ export const tilesCard = (title: string, tiles: Tile[]): Card => {
     const y = 44 + Math.floor(i / cols) * (th + gap)
     const hue = t.isOn ? t.hue : H.faint
     parts.push(`<g class="tile pop" style="${delay(i, 0.07)}"><title>${xml(`${t.label}: ${t.value}`)}</title>`)
-    parts.push(`<rect class="tbox" x="${x.toFixed(1)}" y="${y}" width="${tw.toFixed(1)}" height="${th}" rx="14" fill="${t.isOn ? grad('t', hue) : '#FFFFFF'}" stroke="${t.isOn ? hue : H.line}" stroke-opacity="${t.isOn ? 0.55 : 1}" stroke-width="1.2" filter="url(#soft)"/>`)
+    parts.push(`<rect class="tbox" x="${x.toFixed(1)}" y="${y}" width="${tw.toFixed(1)}" height="${th}" rx="14" fill="${t.isOn ? grad('t', hue) : '#FFFFFF'}" stroke="${t.isOn ? hue : H.line}" stroke-opacity="${t.isOn ? 0.55 : 1}" stroke-width="1.2"/>`)
     // The icon floats in a soft bubble.
     parts.push(`<g class="${t.isOn ? 'float' : ''}" style="${delay(i, 0.4)}"><circle cx="${(x + 22).toFixed(1)}" cy="${y + 21}" r="13" fill="${t.isOn ? hue : H.faint}" fill-opacity=".14"/>`)
     parts.push(`<text x="${(x + 22).toFixed(1)}" y="${y + 27}" text-anchor="middle" style="font-size:15px">${t.icon}</text></g>`)

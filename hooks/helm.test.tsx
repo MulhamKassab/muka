@@ -155,10 +155,10 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   const alt = String(pictures[0]!.props.alt)
   expect(alt).toMatch(/^Muka\. .*Agent tree. .*Usage limit .*Recent: .*builder Read/)
   const source = String(pictures[0]!.props.source)
-  // Drawn straight on the panel, which sizes it: laid out 400 wide, allowed to grow to 560, no frame of its own.
+  // Drawn straight on the panel, which sizes it: laid out 400 wide, allowed to grow to 520, no frame of its own.
   expect(pictures[0]!.props.width).toBeUndefined()
   expect(pictures[0]!.props.isInteractive).toBeUndefined()
-  expect(source).toMatch(/^<svg [^>]*width="560" [^>]*viewBox="0 0 400 /)
+  expect(source).toMatch(/^<svg [^>]*width="520" [^>]*viewBox="0 0 400 /)
   expect(source).not.toContain('rx="16"')
   expect(source).toContain('>MAIN<')
   expect(source).toContain('>CONTEXT<')
