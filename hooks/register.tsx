@@ -1634,7 +1634,7 @@ const HELM_CSS =
   `.hb{font:900 17px ${FONT};fill:url(#brand);letter-spacing:6px}` +
   `.chip{font:700 11px ${FONT}}` +
   // Decorations that only make sense while moving start hidden.
-  `.travel,.shine{opacity:0}` +
+  `.travel,.shine,.border-run{opacity:0}` +
   // Hover (the pictures are drawn interactive on the desktop): a node, row or tile lights up.
   `.node,.row,.tile,.lane,.gauge{transition:opacity .2s,scale .25s cubic-bezier(.3,1.5,.5,1)}` +
   `.node,.tile,.gauge{transform-box:fill-box;transform-origin:center}` +
@@ -1657,6 +1657,8 @@ const DEFS =
   `<radialGradient id="aura" r=".5"><stop offset="0" stop-color="${H.cyan}" stop-opacity=".28"/><stop offset="1" stop-color="${H.cyan}" stop-opacity="0"/></radialGradient>` +
   `<linearGradient id="shine" x1="0" x2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/><stop offset=".5" stop-color="#FFFFFF" stop-opacity=".75"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>` +
   `<filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
+  `<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>` +
+  `<linearGradient id="spark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${H.violet}" stop-opacity=".32"/><stop offset="1" stop-color="${H.cyan}" stop-opacity="0"/></linearGradient>` +
   `<filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0F172A" flood-opacity=".16"/></filter>` +
   `<pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".9" fill="${H.line}"/></pattern>` +
   HUES.map(
@@ -1720,6 +1722,14 @@ const MOTION_CSS =
   `.orbit-fast{transform-box:view-box;animation:mk-spin 3.5s linear infinite}` +
   `.fade{animation:mk-fade .6s ease-out both}` +
   `.float{animation:mk-wobble 3s ease-in-out infinite}` +
+  `@keyframes mk-run{to{stroke-dashoffset:-100}}` +
+  `@keyframes mk-drift{to{translate:var(--tx) var(--ty)}}` +
+  `@keyframes mk-draw{from{stroke-dashoffset:1}}` +
+  `@keyframes mk-bob{50%{translate:0 -3px}}` +
+  `.border-run{opacity:1;animation:mk-run 5s linear infinite}` +
+  `.drift{animation:mk-drift 13s ease-in-out infinite alternate}` +
+  `.draw{animation:mk-draw 1.6s cubic-bezier(.3,.7,.3,1) both}` +
+  `.bob{animation:mk-bob 4s ease-in-out infinite}` +
   `}`
 
 /** Whether Muka's pictures move (/muka motion on|off); a reduce-motion system setting always wins. */
@@ -1732,11 +1742,23 @@ const helmHue = (s: SubAgentStatus | 'stuck'): string =>
   s === 'stuck' ? H.red : s === 'running' ? H.cyan : s === 'done' ? H.green : s === 'stopped' ? H.amber : H.red
 
 /** A Helm card: the panel's own background, a soft border (red when something is stuck). */
-const card = (W: number, Hh: number, body: string, stroke: string = H.line): string =>
+const card = (W: number, Hh: number, body: string, stroke: string = H.line, opts: { live?: boolean; aurora?: number } = {}): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}">` +
   `<style>${HELM_CSS}${motionOn ? MOTION_CSS : ''}</style>` +
   DEFS +
+  `<clipPath id="cardclip"><rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16"/></clipPath>` +
   `<rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="url(#bg)" stroke="${stroke}" stroke-width="1.5"/>` +
+  // An aurora drifting behind the head of the card.
+  (opts.aurora
+    ? `<g clip-path="url(#cardclip)" filter="url(#blur)" opacity=".5">` +
+      `<ellipse class="drift" style="--tx:40px;--ty:6px" cx="70" cy="${opts.aurora * 0.35}" rx="95" ry="34" fill="${H.cyan}" fill-opacity=".35"/>` +
+      `<ellipse class="drift" style="--tx:-50px;--ty:10px;animation-duration:17s" cx="230" cy="${opts.aurora * 0.2}" rx="90" ry="30" fill="${H.violet}" fill-opacity=".3"/>` +
+      `<ellipse class="drift" style="--tx:-30px;--ty:-8px;animation-duration:21s" cx="${W - 40}" cy="${opts.aurora * 0.6}" rx="80" ry="30" fill="#DB2777" fill-opacity=".22"/></g>`
+    : '') +
+  // While Main works, a light runs around the border.
+  (opts.live
+    ? `<rect class="border-run" pathLength="100" x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="none" stroke="url(#brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="12 88"/>`
+    : '') +
   `<g class="fade">${body}</g>` +
   `</svg>`
 
@@ -1806,6 +1828,11 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
   const parts: string[] = []
   let y = 34
   parts.push(`<text x="20" y="${y}" class="hb">MUKA</text>`)
+  // A sheen sweeps across the wordmark.
+  parts.push(
+    `<clipPath id="wm"><text x="20" y="${y}" class="hb">MUKA</text></clipPath>` +
+      `<g clip-path="url(#wm)"><rect class="shine" style="--w:110px;animation-duration:3.6s" x="0" y="${y - 18}" width="34" height="22" fill="url(#shine)"/></g>`,
+  )
   // A LIVE badge while Main works, IDLE otherwise.
   const live = info.isWorking === true
   const badgeHue = nl.isStuck ? H.red : live ? H.green : H.faint
@@ -1863,7 +1890,7 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
 /** The Bridge strip, the head card on every view but the Bridge. */
 export const bridgeStrip = (info: MainInfo, list: SubAgent[], budget: number | undefined, now = Date.now()): { source: string; alt: string } => {
   const s = stripBody(info, list, budget, now)
-  return { source: card(HELM_W, s.height, s.parts, s.isStuck ? H.red : H.line), alt: stripAlt(info, list, budget, now) }
+  return { source: card(HELM_W, s.height, s.parts, s.isStuck ? H.red : H.line, { live: info.isWorking === true, aurora: 70 }), alt: stripAlt(info, list, budget, now) }
 }
 
 // Past this many agents the orbit shows the first ones and a count.
@@ -1944,7 +1971,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const hollow = a.status === 'stopped'
     const live = a.status === 'running'
     const tip = `${a.type} · ${a.model} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${plural(a.stepCount ?? 0, 'step')} · ${duration((a.endedAt ?? now) - a.startedAt)}${estimateUsd(a.usage, a.model) > 0 ? ` · ${usd(estimateUsd(a.usage, a.model))}` : ''}`
-    parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title>`)
+    parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title><g class="bob" style="animation-delay:${(-i * 0.7).toFixed(1)}s">`)
     if (live) {
       parts.push(`<circle class="halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size + 7}" fill="${hue}" fill-opacity=".14"/>`)
       parts.push(`<circle class="ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="none" stroke="${hue}" stroke-width="1.5"/>`)
@@ -1954,6 +1981,16 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     )
     // The helper's own icon inside its sphere.
     parts.push(`<text x="${x.toFixed(1)}" y="${(y + size * 0.36).toFixed(1)}" text-anchor="middle" style="font-size:${(size * 1.05).toFixed(1)}px">${agentIcon(a.type)}</text>`)
+    // A small badge on finished helpers: ✓ done, ✗ failed.
+    if (a.status === 'done' || a.status === 'failed') {
+      const bx = x + size * 0.75
+      const by = y - size * 0.75
+      const bh = a.status === 'done' ? H.green : H.red
+      parts.push(
+        `<g class="pop" style="animation-delay:.5s"><circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="6" fill="${bh}" stroke="#FFFFFF" stroke-width="1.5"/>` +
+          `<text x="${bx.toFixed(1)}" y="${(by + 3).toFixed(1)}" text-anchor="middle" style="font:900 8.5px ${FONT};fill:#FFFFFF">${a.status === 'done' ? '✓' : '✗'}</text></g>`,
+      )
+    }
     const right = x >= cx
     const lx = x + (right ? size + 5 : -(size + 5))
     const anchor = right ? 'start' : 'end'
@@ -1968,7 +2005,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 6).toFixed(1)}" class="ht tag" text-anchor="${anchor}" style="font-size:12.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(`${clip(a.type, Math.min(nameMax, fit(7.4) - 2))}${mark}`)}</text>`)
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 8).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:11px;fill:${hue}">${xml(clip(modelLine, fit(5.8)))}</text>`)
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 21).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:10.5px">${xml(clip(stats, fit(5.6)))}</text>`)
-    parts.push('</g>')
+    parts.push('</g></g>')
   })
   if (list.length > rows.length) parts.push(`<text x="${cx}" y="${cy + r2 + 20}" class="hs" text-anchor="middle">+${list.length - rows.length} more</text>`)
   if (rows.length === 0) parts.push(`<text x="${cx}" y="${cy + 52}" class="hs" text-anchor="middle" style="font-size:12px">no helpers</text>`)
@@ -2099,15 +2136,59 @@ export const bridgeCard = (info: MainInfo, list: SubAgent[], feed: ActivityItem[
   const gauges = gaugeValues(info)
     .map((g, i) => ringGauge(((2 * i + 1) * W) / 6, gaugeTop + 32, 28, g.value, g.label, g.hue))
     .join('')
-  const feedTop = gaugeTop + 96
+  const sparkTop = gaugeTop + 92
+  const spark = sparkBody(feed, info.isWorking === true, 20, sparkTop, W - 40, 46, now)
+  const feedTop = sparkTop + 70
   const divider = `<line x1="20" y1="${feedTop - 4}" x2="${W - 20}" y2="${feedTop - 4}" stroke="${H.line}"/>`
   const f = feedBody(feed, feedTop + 20, 4)
   const Hh = feedTop + 20 + f.height
   const alt = clip(
-    `${stripAlt(info, list, budget, now)} ${agentsAlt(info, list)} ${gaugeAlt(info)} Recent: ${f.items.map(s => `${s.agent} ${stepText(s)}`).join('; ') || 'none yet'}.`,
+    `${stripAlt(info, list, budget, now)} ${agentsAlt(info, list)} ${gaugeAlt(info)} ${spark.alt} Recent: ${f.items.map(s => `${s.agent} ${stepText(s)}`).join('; ') || 'none yet'}.`,
     3000,
   )
-  return { source: card(W, Hh, head.parts + orbit + gauges + divider + f.parts, head.isStuck ? H.red : H.line), alt }
+  return { source: card(W, Hh, head.parts + orbit + gauges + spark.parts + divider + f.parts, head.isStuck ? H.red : H.line, { live: info.isWorking === true, aurora: head.height }), alt }
+}
+
+/** Pace: steps over this prompt's time as a glowing area chart that draws itself in. */
+const sparkBody = (feed: ActivityItem[], live: boolean, x: number, y: number, w: number, h: number, now: number): { parts: string; alt: string } => {
+  const N = 28
+  const t0 = feed.length > 0 ? Math.min(...feed.map(s => s.at)) : now - 60_000
+  const t1 = Math.max(now, t0 + 1)
+  const bins = new Array<number>(N).fill(0)
+  for (const s of feed) bins[Math.min(N - 1, Math.floor(((s.at - t0) / (t1 - t0)) * N))]! += 1
+  // A rolling average of three, so a few steps read as a wave, not spikes.
+  const smooth = bins.map((_, i) => (bins[Math.max(0, i - 1)]! + 2 * bins[i]! + bins[Math.min(N - 1, i + 1)]!) / 4)
+  bins.splice(0, N, ...smooth)
+  const top = Math.max(0.5, ...bins)
+  const ch = h - 16
+  const base = y + 16 + ch
+  const pts = bins.map((v, i) => ({ px: x + (i / (N - 1)) * w, py: base - (v / top) * ch }))
+  // A smooth line through the points (Catmull-Rom as cubic Béziers).
+  let d = `M${pts[0]!.px.toFixed(1)} ${pts[0]!.py.toFixed(1)}`
+  for (let i = 0; i < N - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!
+    const p1 = pts[i]!
+    const p2 = pts[i + 1]!
+    const p3 = pts[Math.min(N - 1, i + 2)]!
+    const c1x = p1.px + (p2.px - p0.px) / 6
+    const c1y = Math.min(base, p1.py + (p2.py - p0.py) / 6)
+    const c2x = p2.px - (p3.px - p1.px) / 6
+    const c2y = Math.min(base, p2.py - (p3.py - p1.py) / 6)
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.px.toFixed(1)} ${p2.py.toFixed(1)}`
+  }
+  const area = `${d} L${(x + w).toFixed(1)} ${base} L${x} ${base} Z`
+  const mins = Math.max(1 / 60, (t1 - t0) / 60_000)
+  const rate = feed.length / mins
+  const last = pts[N - 1]!
+  const parts =
+    `<text x="${x}" y="${y + 8}" class="hl">PACE</text>` +
+    `<text x="${x + w}" y="${y + 8}" class="hs" text-anchor="end" style="font-size:11.5px">${xml(`${feed.length} steps · ${rate >= 10 ? Math.round(rate) : rate.toFixed(1)}/min`)}</text>` +
+    `<line x1="${x}" y1="${base}" x2="${x + w}" y2="${base}" stroke="${H.line}"/>` +
+    `<path class="fade" d="${area}" fill="url(#spark)"/>` +
+    `<path class="draw" pathLength="1" stroke-dasharray="1" d="${d}" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><title>${xml(`${feed.length} steps since your last prompt`)}</title></path>` +
+    (live ? `<circle class="ping" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="none" stroke="#DB2777"/>` : '') +
+    `<circle class="pop" style="animation-delay:1.4s" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#DB2777" stroke-width="2.2" filter="url(#glow)"/>`
+  return { parts, alt: `Pace: ${feed.length} steps, about ${rate.toFixed(1)} a minute.` }
 }
 
 /** The spend by model as one stacked bar, against the budget when there is one. */
