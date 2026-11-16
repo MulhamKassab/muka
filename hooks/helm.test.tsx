@@ -65,7 +65,11 @@ test('the Bridge strip, Orbit and spend bar are well-formed cards', () => {
   expect(orbit.source).toContain('>0 steps<')
   // Two links: Main to builder, builder to Explore; the working one flows.
   expect(orbit.source.match(/<line /g)).toHaveLength(2)
-  expect(orbit.source.match(/stroke-dashoffset/g)).toHaveLength(1)
+  expect(orbit.source.match(/<line class="flow"/g)).toHaveLength(1)
+  // Motion lives in CSS that only applies when the system allows motion, and each agent has a hover tooltip.
+  expect(orbit.source).toContain('@media (prefers-reduced-motion:no-preference)')
+  expect(orbit.source).not.toContain('<animate')
+  expect(orbit.source).toMatch(/<title>builder · sonnet 5\.5 · running/)
   const spend = spendBar({ sonnet: 0.7, haiku: 0.05 }, 3)
   expect(spend.alt).toBe('Spend by model: sonnet $0.70, haiku $0.05; budget $3.00.')
 })

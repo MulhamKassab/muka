@@ -1631,7 +1631,48 @@ const HELM_CSS =
   `.hn{font:600 15px ${FONT};fill:${H.text}}` +
   `.hs{font:13px ${FONT};fill:${H.mute}}` +
   `.hl{font:600 10.5px ${FONT};fill:${H.mute};letter-spacing:1.5px}` +
-  `.hb{font:800 16px ${FONT};fill:${H.cyan};letter-spacing:5px}`
+  `.hb{font:800 16px ${FONT};fill:${H.cyan};letter-spacing:5px}` +
+  // Hover (the pictures are drawn interactive on the desktop): a node, row or tile lights up.
+  `.node,.row,.tile,.lane{transition:opacity .2s}` +
+  `.node:hover .dot{stroke-width:4}.node:hover .tag{font-weight:800}` +
+  `.row:hover{opacity:.7}.tile:hover .tbox{fill-opacity:.16;stroke-width:2}` +
+  `.lane:hover .track{stroke-opacity:.8}`
+
+/**
+ * Motion, only for people who have not asked their system to reduce motion,
+ * and only while /muka motion is on (the pause control). Opacity and transform
+ * where possible; nothing flashes faster than about twice a second.
+ */
+const MOTION_CSS =
+  `@media (prefers-reduced-motion:no-preference){` +
+  `@keyframes mk-pulse{50%{opacity:.35}}` +
+  `@keyframes mk-flow{to{stroke-dashoffset:-18}}` +
+  `@keyframes mk-spin{to{rotate:360deg}}` +
+  `@keyframes mk-ping{from{scale:1;opacity:.55}to{scale:2.4;opacity:0}}` +
+  `@keyframes mk-breathe{50%{scale:1.07}}` +
+  `@keyframes mk-sweep{from{stroke-dashoffset:var(--d)}}` +
+  `@keyframes mk-rise{from{opacity:0;translate:0 8px}}` +
+  `@keyframes mk-grow{from{scale:0 1}}` +
+  `@keyframes mk-pop{from{opacity:0;scale:.4}}` +
+  `.pulse{animation:mk-pulse 1.6s ease-in-out infinite}` +
+  `.pulse-fast{animation:mk-pulse .7s ease-in-out infinite}` +
+  `.flow{animation:mk-flow .9s linear infinite}` +
+  `.spin{transform-box:view-box;animation:mk-spin 80s linear infinite}` +
+  `.spin-back{transform-box:view-box;animation:mk-spin 120s linear infinite reverse}` +
+  `.comet{transform-box:view-box;animation:mk-spin 6s linear infinite}` +
+  `.ping{transform-box:fill-box;transform-origin:center;animation:mk-ping 2s ease-out infinite}` +
+  `.breathe{transform-box:fill-box;transform-origin:center;animation:mk-breathe 2.4s ease-in-out infinite}` +
+  `.sweep{animation:mk-sweep 1s cubic-bezier(.2,.8,.2,1) both}` +
+  `.rise{animation:mk-rise .5s ease-out both}` +
+  `.grow{transform-box:fill-box;transform-origin:left;animation:mk-grow .8s cubic-bezier(.2,.8,.2,1) both}` +
+  `.pop{transform-box:fill-box;transform-origin:center;animation:mk-pop .45s cubic-bezier(.3,1.4,.5,1) both}` +
+  `}`
+
+/** Whether Muka's pictures move (/muka motion on|off); a reduce-motion system setting always wins. */
+let motionOn = true
+
+/** A staggered start for the n-th item of a list. */
+const delay = (n: number, step = 0.06): string => `animation-delay:${(n * step).toFixed(2)}s`
 
 const helmHue = (s: SubAgentStatus | 'stuck'): string =>
   s === 'stuck' ? H.red : s === 'running' ? H.cyan : s === 'done' ? H.green : s === 'stopped' ? H.amber : H.red
@@ -1639,7 +1680,7 @@ const helmHue = (s: SubAgentStatus | 'stuck'): string =>
 /** A Helm card: the panel's own background, a soft border (red when something is stuck). */
 const card = (W: number, Hh: number, body: string, stroke: string = H.line): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}">` +
-  `<style>${HELM_CSS}</style>` +
+  `<style>${HELM_CSS}${motionOn ? MOTION_CSS : ''}</style>` +
   `<rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="none" stroke="${stroke}" stroke-width="1.5"/>` +
   body +
   `</svg>`
@@ -1719,7 +1760,7 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
     const w = W - 40
     const hue = b.pct >= 1 ? H.red : b.pct >= 0.7 ? H.amber : H.green
     parts.push(`<rect x="20" y="${y}" width="${w}" height="3" rx="1.5" fill="${H.track}"/>`)
-    parts.push(`<rect x="20" y="${y}" width="${Math.max(3, w * Math.min(1, b.pct)).toFixed(1)}" height="3" rx="1.5" fill="${hue}"/>`)
+    parts.push(`<rect class="grow" x="20" y="${y}" width="${Math.max(3, w * Math.min(1, b.pct)).toFixed(1)}" height="3" rx="1.5" fill="${hue}"/>`)
   }
   y += 30
   parts.push(`<text x="20" y="${y}" class="hn" style="fill:${nl.isStuck ? H.red : nl.isIdle ? H.mute : H.text}">${xml(clip(nl.text, 44))}</text>`)
@@ -1733,9 +1774,7 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
     items.forEach((it, i) => {
       const fill = it.status === 'completed' ? H.cyan : it.status === 'in_progress' ? H.violet : H.track
       parts.push(
-        `<rect x="${(20 + i * (segW + gap)).toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="9" rx="4.5" fill="${fill}">` +
-          (it.status === 'in_progress' ? '<animate attributeName="opacity" values="1;0.45;1" dur="1.6s" repeatCount="indefinite"/>' : '') +
-          '</rect>',
+        `<rect class="${it.status === 'in_progress' ? 'pulse' : 'pop'}" style="${it.status === 'in_progress' ? '' : delay(i, 0.04)}" x="${(20 + i * (segW + gap)).toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="9" rx="4.5" fill="${fill}"><title>${xml(`${i + 1}. ${it.content} (${it.status.replace('_', ' ')})`)}</title></rect>`,
       )
     })
   } else {
@@ -1777,12 +1816,15 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const sibs = rows.flatMap((__, j) => (parents[j] === p ? [j] : []))
     const k = sibs.indexOf(i)
     const base = pos[p]?.angle ?? -Math.PI / 2
-    const angle = base + (k - (sibs.length - 1) / 2) * 0.45
+    // An only child sits a little to one side, so its labels clear its parent's.
+    const angle = base + (k - (sibs.length - 1) / 2) * 0.45 + (sibs.length === 1 ? -0.6 : 0)
     pos[i] = { x: cx + r2 * Math.cos(angle), y: cy + r2 * Math.sin(angle), angle }
   })
   const parts: string[] = []
-  parts.push(`<circle cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="${H.line}" stroke-width="1.2" stroke-dasharray="3 5"/>`)
-  parts.push(`<circle cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="${H.line}" stroke-width="1.2" stroke-dasharray="3 5"/>`)
+  // The rings turn slowly, the outer one the other way.
+  const origin = `transform-origin:${cx}px ${cy}px`
+  parts.push(`<circle class="spin" style="${origin}" cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="${H.line}" stroke-width="1.2" stroke-dasharray="3 5"/>`)
+  parts.push(`<circle class="spin-back" style="${origin}" cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="${H.line}" stroke-width="1.2" stroke-dasharray="3 5"/>`)
   rows.forEach((r, i) => {
     const p = parents[i]
     const from = p === undefined ? { x: cx, y: cy } : pos[p]!
@@ -1790,18 +1832,20 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const live = r.agent.status === 'running'
     const hue = stuck.has(r.agent.id) ? H.red : helmHue(r.agent.status)
     parts.push(
-      `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}" stroke="${hue}" stroke-opacity="${live ? 0.9 : 0.5}" stroke-width="1.5"${live ? ' stroke-dasharray="5 4"' : ''}>` +
-        (live ? '<animate attributeName="stroke-dashoffset" from="18" to="0" dur="0.9s" repeatCount="indefinite"/>' : '') +
-        '</line>',
+      `<line${live ? ' class="flow"' : ''} x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}" stroke="${hue}" stroke-opacity="${live ? 0.9 : 0.5}" stroke-width="1.5"${live ? ' stroke-dasharray="5 4"' : ''}/>`,
     )
   })
+  // Main: the core breathes while it works, and a small comet circles it.
+  if (info.isWorking) {
+    parts.push(`<g class="comet" style="${origin}"><circle cx="${cx + 42}" cy="${cy}" r="3.5" fill="${H.cyan}"/><circle cx="${cx + 40}" cy="${cy - 8}" r="2.2" fill="${H.cyan}" fill-opacity=".45"/><circle cx="${cx + 36}" cy="${cy - 15}" r="1.4" fill="${H.cyan}" fill-opacity=".2"/></g>`)
+    parts.push(`<circle class="ping" cx="${cx}" cy="${cy}" r="30" fill="none" stroke="${H.cyan}" stroke-width="1.5"/>`)
+  }
   parts.push(
-    `<circle cx="${cx}" cy="${cy}" r="30" fill="${H.core}" stroke="${H.cyan}" stroke-width="2">` +
-      (info.isWorking ? '<animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/>' : '') +
-      '</circle>',
+    `<g class="node"><title>${xml(`Main · ${shortModel(info.model)} · ${mainLine(info)}`)}</title>` +
+      `<circle class="${info.isWorking ? 'breathe dot' : 'dot'}" cx="${cx}" cy="${cy}" r="30" fill="${H.core}" stroke="${H.cyan}" stroke-width="2"/>` +
+      `<text class="ht tag" x="${cx}" y="${cy + 1}" text-anchor="middle" style="font-weight:800;font-size:13px">MAIN</text>` +
+      `<text x="${cx}" y="${cy + 15}" class="hs" text-anchor="middle" style="font-size:10px">${xml(shortModel(info.model))}</text></g>`,
   )
-  parts.push(`<text x="${cx}" y="${cy + 1}" class="ht" text-anchor="middle" style="font-weight:800;font-size:13px">MAIN</text>`)
-  parts.push(`<text x="${cx}" y="${cy + 15}" class="hs" text-anchor="middle" style="font-size:10px">${xml(shortModel(info.model))}</text>`)
   rows.forEach((r, i) => {
     const a = r.agent
     const { x, y } = pos[i]!
@@ -1809,10 +1853,12 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const hue = isStuck ? H.red : helmHue(a.status)
     const size = r.depth === 0 ? 10 : 7
     const hollow = a.status === 'stopped'
+    const live = a.status === 'running'
+    const tip = `${a.type} · ${a.model} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${plural(a.stepCount ?? 0, 'step')} · ${duration((a.endedAt ?? now) - a.startedAt)}${estimateUsd(a.usage, a.model) > 0 ? ` · ${usd(estimateUsd(a.usage, a.model))}` : ''}`
+    parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title>`)
+    if (live) parts.push(`<circle class="ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="none" stroke="${hue}" stroke-width="1.5"/>`)
     parts.push(
-      `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : hue}" stroke="${hue}" stroke-width="2">` +
-        (a.status === 'running' ? `<animate attributeName="opacity" values="1;0.35;1" dur="${isStuck ? 0.6 : 1.6}s" repeatCount="indefinite"/>` : '') +
-        '</circle>',
+      `<circle class="dot${live ? (isStuck ? ' pulse-fast' : ' pulse') : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : hue}" stroke="${hue}" stroke-width="2"/>`,
     )
     const right = x >= cx
     const lx = x + (right ? size + 5 : -(size + 5))
@@ -1825,9 +1871,10 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const modelLine = `${a.model} · ${took}`
     const stats = [plural(a.stepCount ?? 0, 'step'), cost > 0 ? usd(cost) : ''].filter(Boolean).join(' · ')
     const mark = a.status === 'done' ? ' ✓' : isStuck ? ' ⚠' : a.status === 'failed' ? ' ✗' : ''
-    parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 6).toFixed(1)}" class="ht" text-anchor="${anchor}" style="font-size:12.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(`${clip(a.type, Math.min(nameMax, fit(7.4) - 2))}${mark}`)}</text>`)
+    parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 6).toFixed(1)}" class="ht tag" text-anchor="${anchor}" style="font-size:12.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(`${clip(a.type, Math.min(nameMax, fit(7.4) - 2))}${mark}`)}</text>`)
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 8).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:11px;fill:${hue}">${xml(clip(modelLine, fit(5.8)))}</text>`)
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 21).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:10.5px">${xml(clip(stats, fit(5.6)))}</text>`)
+    parts.push('</g>')
   })
   if (list.length > rows.length) parts.push(`<text x="${cx}" y="${cy + r2 + 20}" class="hs" text-anchor="middle">+${list.length - rows.length} more</text>`)
   if (rows.length === 0) parts.push(`<text x="${cx}" y="${cy + 52}" class="hs" text-anchor="middle" style="font-size:12px">no helpers</text>`)
@@ -1840,7 +1887,8 @@ const ringGauge = (gx: number, gy: number, r: number, value: number | undefined,
   const sw = Math.max(5, Math.round(r / 4.5))
   let out = `<circle cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${H.track}" stroke-width="${sw}"/>`
   if (value !== undefined && value > 0) {
-    out += `<circle cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${hue}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${((len * Math.min(100, value)) / 100).toFixed(1)} ${len.toFixed(1)}" transform="rotate(-90 ${gx} ${gy})"/>`
+    const arc = ((len * Math.min(100, value)) / 100).toFixed(1)
+    out += `<circle class="sweep" style="--d:${arc}" cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${hue}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${arc} ${len.toFixed(1)}" transform="rotate(-90 ${gx} ${gy})"><title>${xml(`${label.toLowerCase()}: ${Math.round(value)}%`)}</title></circle>`
   }
   out += `<text x="${gx}" y="${gy + 5}" class="hn" text-anchor="middle" style="font-size:${r >= 30 ? 16 : 13.5}px">${value === undefined ? '–' : `${Math.round(value)}%`}</text>`
   out += `<text x="${gx}" y="${gy + r + 18}" class="hl" text-anchor="middle">${label}</text>`
@@ -1880,7 +1928,7 @@ const feedBody = (feed: ActivityItem[], y0: number, max: number): { parts: strin
     const y = y0 + i * 22
     const who = s.outcome ? H.red : feedHue(s.agentId ?? s.agent)
     parts.push(
-      `<text x="20" y="${y}" class="hs" style="${i === 0 ? `fill:${H.text}` : ''}">` +
+      `<text x="20" y="${y}" class="hs row rise" style="${i === 0 ? `fill:${H.text};` : ''}${delay(i, 0.08)}">` +
         `<tspan style="fill:${H.faint}">${xml(clock(s.at).slice(0, 5))}</tspan>  <tspan style="fill:${who};font-weight:600">${xml(clip(s.agent, 12))}</tspan> · ${xml(clip(stepText(s), 36))}</text>`,
     )
   })
@@ -1966,7 +2014,7 @@ export const spendBar = (spend: Record<string, number> | undefined, budget: numb
   parts.push(`<rect x="20" y="20" width="${w}" height="14" rx="7" fill="${H.track}"/>`)
   for (const [m, v] of entries) {
     const segW = (w * v) / scale
-    parts.push(`<rect x="${x.toFixed(1)}" y="20" width="${Math.max(2, segW).toFixed(1)}" height="14" fill="${hue[m] ?? H.cyan}"/>`)
+    parts.push(`<rect class="grow" x="${x.toFixed(1)}" y="20" width="${Math.max(2, segW).toFixed(1)}" height="14" fill="${hue[m] ?? H.cyan}"><title>${xml(`${m}: ${usd(v)}`)}</title></rect>`)
     x += segW
   }
   if (budget) {
@@ -2015,10 +2063,11 @@ export const barsCard = (title: string, rows: BarRow[], max?: number, empty = 'N
   rows.forEach((r, i) => {
     const y = 52 + i * 26
     const w = Math.max(3, (track * Math.max(0, r.value)) / (max ?? top))
+    parts.push(`<g class="row"><title>${xml(`${r.label}: ${r.text}`)}</title>`)
     parts.push(`<text x="20" y="${y + 9}" class="ht" style="font-size:12.5px">${xml(clip(r.label, 17))}</text>`)
     parts.push(`<rect x="${LABEL + 20}" y="${y}" width="${track}" height="12" rx="6" fill="${H.track}"/>`)
-    parts.push(`<rect x="${LABEL + 20}" y="${y}" width="${Math.min(track, w).toFixed(1)}" height="12" rx="6" fill="${r.hue ?? H.cyan}"/>`)
-    parts.push(`<text x="${W - 20}" y="${y + 10}" class="hs" text-anchor="end" style="font-size:12px">${xml(r.text)}</text>`)
+    parts.push(`<rect class="grow" style="${delay(i, 0.07)}" x="${LABEL + 20}" y="${y}" width="${Math.min(track, w).toFixed(1)}" height="12" rx="6" fill="${r.hue ?? H.cyan}"/>`)
+    parts.push(`<text x="${W - 20}" y="${y + 10}" class="hs" text-anchor="end" style="font-size:12px">${xml(r.text)}</text></g>`)
   })
   if (rows.length === 0) parts.push(`<text x="20" y="60" class="hs" style="fill:${H.faint}">${xml(empty)}</text>`)
   const Hh = 52 + Math.max(1, rows.length) * 26 + 6
@@ -2040,10 +2089,11 @@ export const tilesCard = (title: string, tiles: Tile[]): Card => {
     const x = 20 + (i % cols) * (tw + gap)
     const y = 44 + Math.floor(i / cols) * (th + gap)
     const hue = t.isOn ? t.hue : H.faint
-    parts.push(`<rect x="${x.toFixed(1)}" y="${y}" width="${tw.toFixed(1)}" height="${th}" rx="12" fill="${t.isOn ? hue : 'none'}" fill-opacity="${t.isOn ? 0.08 : 0}" stroke="${t.isOn ? hue : H.line}" stroke-width="1.2"/>`)
+    parts.push(`<g class="tile pop" style="${delay(i, 0.07)}"><title>${xml(`${t.label}: ${t.value}`)}</title>`)
+    parts.push(`<rect class="tbox" x="${x.toFixed(1)}" y="${y}" width="${tw.toFixed(1)}" height="${th}" rx="12" fill="${t.isOn ? hue : '#FFFFFF'}" fill-opacity="${t.isOn ? 0.08 : 0}" stroke="${t.isOn ? hue : H.line}" stroke-width="1.2"/>`)
     parts.push(`<text x="${(x + 12).toFixed(1)}" y="${y + 26}" style="font-size:16px">${t.icon}</text>`)
     parts.push(`<text x="${(x + tw - 12).toFixed(1)}" y="${y + 30}" class="hn" text-anchor="end" style="font-size:20px;fill:${t.isOn ? hue : H.faint}">${xml(t.value)}</text>`)
-    parts.push(`<text x="${(x + 12).toFixed(1)}" y="${y + 56}" class="hs" style="font-size:11.5px">${xml(t.label)}</text>`)
+    parts.push(`<text x="${(x + 12).toFixed(1)}" y="${y + 56}" class="hs" style="font-size:11.5px">${xml(t.label)}</text></g>`)
   })
   const Hh = 44 + Math.ceil(tiles.length / cols) * (th + gap) + 8
   return { source: card(W, Hh, parts.join('')), alt: clip(`${title}: ${tiles.map(t => `${t.label} ${t.value}`).join(', ')}.`, 800) }
@@ -2055,8 +2105,8 @@ export const listCard = (title: string, rows: { icon: string; who: string; what:
   const parts: string[] = [`<text x="20" y="30" class="hl">${xml(title.toUpperCase())}</text>`]
   rows.forEach((r, i) => {
     const y = 56 + i * 24
-    parts.push(`<text x="20" y="${y}" style="font-size:13px">${r.icon}</text>`)
-    parts.push(`<text x="42" y="${y}" class="hs"><tspan style="fill:${r.hue ?? H.text};font-weight:600">${xml(clip(r.who, 12))}</tspan> · ${xml(clip(r.what, 40))}</text>`)
+    parts.push(`<text class="rise" x="20" y="${y}" style="font-size:13px;${delay(i, 0.06)}">${r.icon}</text>`)
+    parts.push(`<text x="42" y="${y}" class="hs row rise" style="${delay(i, 0.06)}"><title>${xml(`${r.who}: ${r.what}`)}</title><tspan style="fill:${r.hue ?? H.text};font-weight:600">${xml(clip(r.who, 12))}</tspan> · ${xml(clip(r.what, 40))}</text>`)
   })
   if (rows.length === 0) parts.push(`<text x="20" y="56" class="hs" style="fill:${H.faint}">${xml(empty)}</text>`)
   const Hh = 56 + Math.max(1, rows.length) * 24 - 4
@@ -2083,11 +2133,16 @@ export const lanesCard = (feed: ActivityItem[], list: SubAgent[], now = Date.now
     const live = k === 'Main' || agent?.status === 'running'
     const steps = feed.filter(s => keyOf(s) === k)
     parts.push(`<text x="20" y="${y + 4}" class="ht" style="font-size:12.5px;fill:${hue === H.text ? H.text : hue};font-weight:600">${xml(`${agentIcon(name)} ${clip(name, 9)}`)}</text>`)
-    parts.push(`<line x1="${LABEL + 20}" y1="${y}" x2="${LABEL + 20 + track}" y2="${y}" stroke="${live ? hue : H.line}" stroke-opacity="${live ? 0.35 : 1}" stroke-width="2" stroke-linecap="round"/>`)
-    for (const s of steps.slice(-60)) {
+    parts.push(`<g class="lane"><line class="track${live ? ' flow' : ''}" x1="${LABEL + 20}" y1="${y}" x2="${LABEL + 20 + track}" y2="${y}" stroke="${live ? hue : H.line}" stroke-opacity="${live ? 0.35 : 1}" stroke-width="2" stroke-linecap="round"${live ? ' stroke-dasharray="6 3"' : ''}/>`)
+    const shown = steps.slice(-60)
+    shown.forEach((s, j) => {
       const x = LABEL + 20 + ((s.at - t0) / (t1 - t0)) * track
-      parts.push(`<circle cx="${x.toFixed(1)}" cy="${y}" r="${s.outcome ? 5 : 4}" fill="${s.outcome ? H.red : hue === H.text ? H.cyan : hue}"/>`)
-    }
+      const isLast = live && j === shown.length - 1
+      parts.push(
+        `<circle class="${isLast ? 'pulse' : 'pop'}" style="${isLast ? '' : delay(j, 0.015)}" cx="${x.toFixed(1)}" cy="${y}" r="${s.outcome ? 5 : 4}" fill="${s.outcome ? H.red : hue === H.text ? H.cyan : hue}"><title>${xml(`${clock(s.at)} ${s.agent}: ${stepText(s)}`)}</title></circle>`,
+      )
+    })
+    parts.push('</g>')
     parts.push(`<text x="${W - 20}" y="${y + 18}" class="hs" text-anchor="end" style="font-size:10.5px">${steps.length}${steps.some(s => s.outcome) ? ` · ${steps.filter(s => s.outcome).length} ✗` : ''}</text>`)
   })
   if (lanes.length === 0) parts.push(`<text x="20" y="60" class="hs" style="fill:${H.faint}">Nothing has run since your last prompt.</text>`)
@@ -2552,6 +2607,13 @@ const setSmart = async ($: EngineInterface, want: boolean): Promise<{ text: stri
   }
 }
 
+/** Motion on or off, kept across chats; the open pane redraws at once. */
+const setMotion = async ($: EngineInterface, want: boolean): Promise<void> => {
+  motionOn = want
+  await $.store.set('motion', want)
+  await update($, tick, n => n + 1)
+}
+
 /** A bare /muka, or /muka status: what is on, and how to change it. */
 const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
   text: [
@@ -2560,6 +2622,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Smart rules: ${isSmart ? 'on' : 'off'} (/muka smart, /muka smart off)`,
     `- Delete guard: ${isGuardOn ? 'on' : 'off'} (/muka guard on, /muka guard off)`,
     `- Pings: ${pingsOn ? 'on' : 'off'} (/muka ping on, /muka ping off)`,
+    `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
     '- Both panel and rules at once: /muka all on, /muka all off',
     '- Setup: /muka setup installs the helper agents, the status line and the settings; /muka setup undo puts back what it replaced',
@@ -2750,6 +2813,11 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     return { text: recapText(entries, label) }
   }
   if (words[0] === 'smart') return setSmart($, words[1] !== 'off')
+  if (words[0] === 'motion' || words[0] === 'animations') {
+    const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !motionOn
+    await setMotion($, want)
+    return { text: want ? 'Muka motion on: the panel\'s pictures move (unless your system asks to reduce motion).' : 'Muka motion off: the panel\'s pictures stay still.' }
+  }
   if (words[0] === 'all') {
     const want = words[1] !== 'off'
     if (want) await turnOn($)
@@ -2816,6 +2884,7 @@ export const register: Register = on => {
     isSmart = (await $.store.get('smart')) !== false
     isGuardOn = (await $.store.get('guard')) === true
     pingsOn = (await $.store.get('pings')) !== false
+    motionOn = (await $.store.get('motion')) !== false
     const storedBudget = await $.store.get('budget').catch(() => undefined)
     defaultBudget = storedBudget === null ? undefined : typeof storedBudget === 'number' && storedBudget > 0 ? storedBudget : undefined
     sessionId = (await $.session.id().catch(() => undefined)) ?? `session-${Date.now()}`
@@ -3140,7 +3209,7 @@ export const register: Register = on => {
     if (e.surface === 'desktop') {
       const { Svg } = $.ui.resolve(e)
       const card = bridgeStrip(info, list, defaultBudget)
-      header = current === 'flow' ? [] : [<Svg source={card.source} alt={card.alt} />]
+      header = current === 'flow' ? [] : [<Svg isInteractive source={card.source} alt={card.alt} />]
     }
 
     // Subscribe to the 30-second tick, so times and alerts stay current.
@@ -3175,7 +3244,7 @@ export const register: Register = on => {
     const pic = (c: { source: string; alt: string }): RenderChildren => {
       if (!deskSvg) return <Text> </Text>
       const Pic = deskSvg
-      return <Pic source={c.source} alt={c.alt} />
+      return <Pic isInteractive source={c.source} alt={c.alt} />
     }
     const page = (body: RenderChildren) =>
       isDesk ? (
@@ -3275,7 +3344,7 @@ export const register: Register = on => {
         const { Svg } = $.ui.resolve(e)
         const chart = timelineChart(spans)
         const spend = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        return page([<Text bold>Mission: who ran when</Text>, <Svg source={chart.source} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg source={spend.source} alt={spend.alt} />])
+        return page([<Text bold>Mission: who ran when</Text>, <Svg isInteractive source={chart.source} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg isInteractive source={spend.source} alt={spend.alt} />])
       }
       const lines = timelineText(spans)
       const room = Math.max(2, rows - 13)
@@ -3300,7 +3369,7 @@ export const register: Register = on => {
       if (e.surface === 'desktop') {
         const { Svg } = $.ui.resolve(e)
         const spendCard = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        spendPicture.push(<Svg source={spendCard.source} alt={spendCard.alt} />)
+        spendPicture.push(<Svg isInteractive source={spendCard.source} alt={spendCard.alt} />)
       }
       if (isDesk) {
         const agentRows: BarRow[] = [
@@ -3641,8 +3710,10 @@ export const register: Register = on => {
       // The Bridge as one card, then a button per agent.
       const bridge = bridgeCard(info, list, await read($, activity), defaultBudget)
       return page([
-        <Svg source={bridge.source} alt={bridge.alt} />,
+        <Svg isInteractive source={bridge.source} alt={bridge.alt} />,
         openers,
+        // The pause control for the moving pictures (hover any dot, gauge or bar for its details).
+        <Button key="motion-toggle" label={motionOn ? '⏸ Pause animations' : '▶ Play animations'} dimColor onPress={() => setMotion($, !motionOn)} />,
       ])
     }
 

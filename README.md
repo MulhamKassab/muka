@@ -46,6 +46,7 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka budget 5` / `/muka budget off` | A spending cap per prompt (none by default) |
 | `/muka guard on` / `/muka guard off` | Ask before shell commands delete files (off by default) |
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
+| `/muka motion on` / `/muka motion off` | The panel's animations (on by default; also ⏸ on the Bridge) |
 | `/muka recap` / `/muka recap yesterday` | The day's finished prompts |
 
 `/orbit`, `/helm` and `/savvy` are old names for `/muka`.
@@ -88,6 +89,8 @@ A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 
 - **⏱️ Timeline:** when each agent ran.
 - **🧊 Cache:** a ring for all agents and a bar per agent.
 - **💡 Reflect:** the last turn as tiles, and an AI review on demand.
+
+The pictures move: the Orbit's rings turn, working helpers pulse and ping, links to them flow, Main breathes with a comet circling it while it works, gauges sweep in, bars grow, tiles and steps pop in. Hover any dot, gauge, bar, tile or step for its details. ⏸ Pause animations under the Bridge (or `/muka motion off`) stops them, and a system "reduce motion" setting always keeps them still.
 
 In the terminal and editors the same views are text.
 
