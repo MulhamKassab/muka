@@ -162,9 +162,14 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   expect(await desk.find({ type: 'Input', key: 'steer-text' })).toBeDefined()
   expect(await desk.find({ type: 'Button', key: 'steer-to-agent-1' })).toBeDefined()
   expect(await desk.find({ type: 'Button', key: 'quick-explain' })).toBeDefined()
+  // A press must not need scrolling: the steering is drawn before the Bridge picture.
+  const order = (await desk.findAll({})).map(n => (n.type === 'Svg' ? 'svg' : n.props?.key === 'steer-text' ? 'input' : '')).filter(Boolean)
+  expect(order.indexOf('input')).toBeLessThan(order.lastIndexOf('svg'))
+  // Pressing twice before the agent reads it sends one note.
+  await desk.press({ key: 'quick-wrap' })
   await desk.press({ key: 'quick-wrap' })
   const main = (await $.tool.call({ tool: 'Read', file_path: 'C:\work\b.ts' } as never)) as { context?: string[] }
-  expect(main.context!.some(c => /Start wrapping up/.test(c))).toBe(true)
+  expect(main.context!.filter(c => /Start wrapping up/.test(c))).toHaveLength(1)
   // Spend: the head strip, then spend by model against the budget.
   await desk.press({ key: 'tab-cost' })
   const spendPics = await desk.findAll({ type: 'Svg' })

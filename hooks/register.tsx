@@ -2524,8 +2524,14 @@ const sendSteer = async ($: EngineInterface, text: string): Promise<void> => {
   const list = await read($, agents)
   const target = to === 'main' || !list.some(a => a.id === to && a.status === 'running') ? 'main' : to
   const toLabel = target === 'main' ? 'Main' : (list.find(a => a.id === target)?.type ?? 'agent')
-  const note: SteerNote = { id: `steer-${Date.now()}-${++noticeSeq}`, text: clip(body, 1000), to: target, toLabel, at: Date.now() }
-  await update($, steer, l => [...l, note].slice(-20))
+  const noteText = clip(body, 1000)
+  // The same note to the same agent, still unread: a repeat press, not a new note.
+  const isRepeat = (await read($, steer)).some(n => n.deliveredAt === undefined && n.to === target && n.text === noteText)
+  if (!isRepeat) {
+    const note: SteerNote = { id: `steer-${Date.now()}-${++noticeSeq}`, text: noteText, to: target, toLabel, at: Date.now() }
+    await update($, steer, l => [...l, note].slice(-20))
+  }
+  await Promise.resolve($.ui.toast(isRepeat ? `Already waiting for ${toLabel}` : `🎯 Sent to ${toLabel}: it reads it at its next step`)).catch(() => undefined)
 }
 
 /** /muka smart on|off: the rules for new chats, and a note so this chat follows the change at once. */
@@ -3643,8 +3649,9 @@ export const register: Register = on => {
         { key: 'quick-smaller', label: '🐢 Smaller steps', preset: 'smaller' },
         { key: 'quick-cheaper', label: '💰 Keep it cheap', preset: 'cheaper' },
       ]
+      // Steering comes first: a press redraws the pane and it scrolls back to
+      // the top, so the controls and the "sent" line must be up there.
       return page([
-        <Svg source={bridge.source} alt={bridge.alt} />,
         <Text bold>🎯 Steer</Text>,
         <Box flexDirection="row" flexWrap="wrap" gap={1}>
           <Button key="steer-to-main" label={`${agentIcon('main')} Main`} variant={target === 'main' ? 'primary' : 'secondary'} onPress={() => update($, steerTo, () => 'main')} />
@@ -3665,6 +3672,7 @@ export const register: Register = on => {
         ) : (
           <Text> </Text>
         ),
+        <Svg source={bridge.source} alt={bridge.alt} />,
         openers,
       ])
     }
