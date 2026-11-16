@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { contextNudge, guardModel, looksLarge, newWasteState, WASTE_BIG, wasteCheck } from './register'
+import { actualSize, contextNudge, efficiencyReport, guardModel, looksLarge, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
+import type { LogEntry } from '../types'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type On = Parameters<Body>[1]
@@ -133,4 +134,36 @@ test('looksLarge reads the size of a prompt', () => {
   expect(looksLarge('refactor the auth module')).toBe(true)
   expect(looksLarge('do these:\n1. a\n2. b\n3. c')).toBe(true)
   expect(looksLarge(Array(90).fill('word').join(' '))).toBe(true)
+})
+
+const entry = (over: Partial<LogEntry>): LogEntry => ({ at: 0, project: 'p', prompt: 'do it', durationMs: 60_000, mainSteps: 5, agents: 0, failed: 0, files: [], tokens: 10_000, costUsd: 0.2, ...over })
+
+test('the size Claude gives a task is read off its text, and checked against what it took', () => {
+  expect(sizeIn('Size: M. Two changes...')).toBe('M')
+  expect(sizeIn('**Size: L**')).toBe('L')
+  expect(sizeIn('the font size is 12')).toBeUndefined()
+  expect(actualSize(entry({}))).toBe('S')
+  expect(actualSize(entry({ agents: 1, mainSteps: 20 }))).toBe('M')
+  expect(actualSize(entry({ agents: 3 }))).toBe('L')
+  // Too few sized tasks: nothing to say.
+  expect(sizingNote([entry({ size: 'S', agents: 3 })])).toBeUndefined()
+  // Often sized too small: told to size up.
+  const under = [...Array(4)].map(() => entry({ size: 'S', agents: 2, mainSteps: 30 })).concat([entry({ size: 'S' }), entry({ size: 'M', agents: 1 })])
+  expect(sizingNote(under)).toMatch(/4 of 6 tasks turned out bigger than you sized them/)
+})
+
+test('the report sums the spend and suggests from the numbers', () => {
+  const list = [
+    entry({ costUsd: 3, byModel: { opus: 2.5, haiku: 0.5 }, byHelper: { Main: 2.5, Explore: 0.5 }, helperCount: { Explore: 6 }, cacheRate: 40, wasteCount: 2, wasteTokens: 3000, agents: 6, agentSteps: 40, prompt: 'big one' }),
+    entry({ costUsd: 0.1, byModel: { opus: 0.1 }, byHelper: { Main: 0.1 }, cacheRate: 50 }),
+  ]
+  const r = efficiencyReport(list, 7)
+  expect(r).toMatch(/^\*\*Muka report, last 7 days:\*\* 2 prompts, about \$3\.10/)
+  expect(r).toMatch(/\*\*By model:\*\* opus \$2\.60 \(84%\)/)
+  expect(r).toMatch(/Explore \$0\.50 \(6×\)/)
+  expect(r).toMatch(/\*\*Caught:\*\* 2 waste nudges/)
+  expect(r).toMatch(/- \$3\.00 · p · "big one"/)
+  expect(r).toMatch(/on Opus or Fable/)
+  expect(r).toMatch(/The cache served only 45%/)
+  expect(efficiencyReport([], 7)).toBe('No finished prompts logged in the last 7 days.')
 })

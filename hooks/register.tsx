@@ -1485,6 +1485,117 @@ export const recapText = (entries: LogEntry[], dayLabel: string): string => {
 }
 
 // ---------------------------------------------------------------------------
+// The efficiency report and self-tuning sizes, read off the prompt log.
+
+type Size = 'S' | 'M' | 'L'
+const SIZE_RANK: Record<Size, number> = { S: 0, M: 1, L: 2 }
+
+/** The size Claude gave a task, from a "Size: M" line in its text; undefined when none. */
+export const sizeIn = (text: string): Size | undefined => {
+  const m = text.match(/\bSize\b\s*\**\s*[:=]\s*\**\s*(S|M|L)\b/)
+  return m ? (m[1] as Size) : undefined
+}
+
+/** How big a finished prompt really was, by its helpers and steps. */
+export const actualSize = (e: LogEntry): Size => {
+  const steps = e.mainSteps + (e.agentSteps ?? 0)
+  if (e.agents >= 3 || steps >= 60) return 'L'
+  if (e.agents === 0 && steps <= 10) return 'S'
+  return 'M'
+}
+
+/** How Claude's sizes compared with what the tasks took. */
+export const sizingStats = (entries: LogEntry[]): { sized: number; under: number; over: number } => {
+  const sized = entries.filter(e => e.size !== undefined)
+  return {
+    sized: sized.length,
+    under: sized.filter(e => SIZE_RANK[e.size!] < SIZE_RANK[actualSize(e)]).length,
+    over: sized.filter(e => SIZE_RANK[e.size!] - SIZE_RANK[actualSize(e)] >= 2).length,
+  }
+}
+
+/**
+ * The self-tuning line added to the rules when Claude has been sizing tasks
+ * too small (or far too big) lately; undefined when its sizes are fine or
+ * there are too few to tell.
+ */
+export const sizingNote = (entries: LogEntry[]): string | undefined => {
+  const s = sizingStats(entries)
+  if (s.sized < 5) return undefined
+  if (s.under >= 3 && s.under / s.sized >= 0.3) {
+    return `Muka's sizing check: in the last week, ${s.under} of ${s.sized} tasks turned out bigger than you sized them. When unsure between two sizes, pick the bigger one, and plan helpers for it from the start.`
+  }
+  if (s.over >= 3 && s.over / s.sized >= 0.3) {
+    return `Muka's sizing check: in the last week, ${s.over} of ${s.sized} tasks you called L were small. Keep L for work that truly splits into independent pieces.`
+  }
+  return undefined
+}
+
+const addTo = (into: Record<string, number>, from: Record<string, number> | undefined): void => {
+  for (const [k, v] of Object.entries(from ?? {})) into[k] = (into[k] ?? 0) + v
+}
+
+const shareOf = (part: number, whole: number): string => `${whole > 0 ? Math.round((100 * part) / whole) : 0}%`
+
+/** The efficiency report over some days of the prompt log, as Markdown, with suggestions drawn from the numbers. */
+export const efficiencyReport = (entries: LogEntry[], days: number): string => {
+  if (entries.length === 0) return `No finished prompts logged in the last ${plural(days, 'day')}.`
+  const cost = entries.reduce((n, e) => n + (e.costUsd ?? 0), 0)
+  const tokens = entries.reduce((n, e) => n + e.tokens, 0)
+  const byModel: Record<string, number> = {}
+  const byHelper: Record<string, number> = {}
+  const helperCount: Record<string, number> = {}
+  for (const e of entries) {
+    addTo(byModel, e.byModel)
+    addTo(byHelper, e.byHelper)
+    addTo(helperCount, e.helperCount)
+  }
+  const rates = entries.map(e => e.cacheRate).filter((r): r is number => r !== undefined)
+  const cache = rates.length > 0 ? Math.round(rates.reduce((a, b) => a + b, 0) / rates.length) : undefined
+  const wasteTokens = entries.reduce((n, e) => n + (e.wasteTokens ?? 0), 0)
+  const wasteCount = entries.reduce((n, e) => n + (e.wasteCount ?? 0), 0)
+  const guarded = entries.reduce((n, e) => n + (e.guarded ?? 0), 0)
+  const out: string[] = [
+    `**Muka report, last ${plural(days, 'day')}:** ${plural(entries.length, 'prompt')}, about ${usd(cost)} at API prices (${usd(cost / entries.length)} a prompt), ${kTokens(tokens)} tokens${cache !== undefined ? `, ${cache}% cached` : ''}.`,
+  ]
+  const models = Object.entries(byModel).sort((a, b) => b[1] - a[1])
+  if (models.length > 0) out.push('', `**By model:** ${models.map(([m, v]) => `${m} ${usd(v)} (${shareOf(v, cost)})`).join(' · ')}`)
+  const helpers = Object.entries(byHelper).sort((a, b) => b[1] - a[1])
+  if (helpers.length > 0) out.push(`**By who:** ${helpers.map(([h, v]) => `${h} ${usd(v)}${helperCount[h] ? ` (${helperCount[h]}×)` : ''}`).join(' · ')}`)
+  // By size: how many, and what each size costs on average.
+  const bySize = (['S', 'M', 'L'] as Size[]).map(s => {
+    const list = entries.filter(e => (e.size ?? actualSize(e)) === s)
+    return { s, n: list.length, avg: list.length ? list.reduce((n, e) => n + (e.costUsd ?? 0), 0) / list.length : 0 }
+  })
+  out.push(`**By size:** ${bySize.map(b => `${b.s} ${b.n}× avg ${usd(b.avg)}`).join(' · ')}`)
+  const sizing = sizingStats(entries)
+  if (sizing.sized > 0) out.push(`**Sizing:** ${sizing.sized} sized; ${sizing.under} turned out bigger than sized, ${sizing.over} far smaller.`)
+  if (wasteCount > 0 || guarded > 0) out.push(`**Caught:** ${plural(wasteCount, 'waste nudge')} (~${kTokens(wasteTokens)} tokens)${guarded > 0 ? `, ${plural(guarded, 'helper')} moved to the rules' model` : ''}.`)
+  // The costliest prompts, against the typical one of their size.
+  const top = [...entries].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0)).slice(0, 3).filter(e => (e.costUsd ?? 0) > 0)
+  if (top.length > 0) {
+    out.push('', '**Costliest prompts:**')
+    for (const e of top) out.push(`- ${usd(e.costUsd ?? 0)} · ${e.project} · "${clip(e.prompt, 60)}" · ${e.size ?? actualSize(e)}, ${plural(e.mainSteps + (e.agentSteps ?? 0), 'step')}, ${plural(e.agents, 'helper')}`)
+  }
+  // Suggestions, each from a number above.
+  const tips: string[] = []
+  const pricey = (byModel.opus ?? 0) + (byModel.fable ?? 0)
+  if (cost > 0 && pricey / cost >= 0.5) tips.push(`${shareOf(pricey, cost)} of the spend is on Opus or Fable. For routine work, a Sonnet main agent (\`/model sonnet\`) costs far less.`)
+  const explore = byHelper.Explore ?? 0
+  const helperSpend = helpers.filter(([h]) => h !== 'Main').reduce((n, [, v]) => n + v, 0)
+  if (helperSpend > 0 && explore / helperSpend >= 0.4 && (helperCount.Explore ?? 0) >= 5) tips.push(`Explore helpers take ${shareOf(explore, helperSpend)} of the helper spend. Ask them for locations and facts, not whole files, and send fewer at once.`)
+  if (cache !== undefined && cache < 60) tips.push(`The cache served only ${cache}% of input. Long sessions on one task cache best; editing CLAUDE.md or settings mid-session, or switching models, resets it.`)
+  if (tokens > 0 && wasteTokens / tokens >= 0.05) tips.push(`About ${shareOf(wasteTokens, tokens)} of tokens went to waste Muka caught (re-reads, retries, huge outputs). Grep and line ranges keep results small.`)
+  const small = bySize.find(b => b.s === 'S')!
+  if (small.n >= 3 && small.avg >= 0.5) tips.push(`Small tasks average ${usd(small.avg)}. For a quick fix, a cheaper model or a fresh short chat costs less than a long one.`)
+  const note = sizingNote(entries)
+  if (note) tips.push(note.replace(/^Muka's sizing check: /, 'Sizing: '))
+  out.push('', tips.length > 0 ? '**Suggestions:**' : '**Suggestions:** none: nothing stands out.')
+  for (const t of tips) out.push(`- ${t}`)
+  return out.join('\n')
+}
+
+// ---------------------------------------------------------------------------
 // Progress: the main agent's task list (the checklist it keeps under its
 // messages), read off its own update_plan or TodoWrite calls.
 
@@ -2501,6 +2612,33 @@ const readLog = async ($: EngineInterface, t: number): Promise<LogEntry[]> => {
   return lists.flatMap(l => (Array.isArray(l) ? (l as LogEntry[]) : []))
 }
 
+/** This prompt's spend by model family and by who spent it, and how many helpers of each type ran. */
+const promptSpend = (usage: Usage | undefined, model: string | undefined, list: SubAgent[]): Pick<LogEntry, 'byModel' | 'byHelper' | 'helperCount'> => {
+  const byModel: Record<string, number> = {}
+  const byHelper: Record<string, number> = {}
+  const helperCount: Record<string, number> = {}
+  const add = (who: string, m: string | undefined, u: Usage | undefined) => {
+    const v = estimateUsd(u, m)
+    if (v <= 0) return
+    const f = family(m) ?? 'other'
+    byModel[f] = (byModel[f] ?? 0) + v
+    byHelper[who] = (byHelper[who] ?? 0) + v
+  }
+  add('Main', model, usage)
+  for (const a of list) {
+    helperCount[a.type] = (helperCount[a.type] ?? 0) + 1
+    add(a.type, a.model, a.usage)
+  }
+  return { byModel, byHelper, helperCount }
+}
+
+/** The log of the last few days, every session's, oldest first. */
+const readLogDays = async ($: EngineInterface, days: number): Promise<LogEntry[]> => {
+  const out: LogEntry[] = []
+  for (let d = days - 1; d >= 0; d--) out.push(...(await readLog($, Date.now() - d * 24 * 3600 * 1000)))
+  return out.sort((a, b) => a.at - b.at)
+}
+
 /** Drops log days older than LOG_DAYS_KEPT. */
 const pruneLog = async ($: EngineInterface): Promise<void> => {
   const oldest = dayKey(Date.now() - LOG_DAYS_KEPT * 24 * 3600 * 1000)
@@ -2803,6 +2941,9 @@ export const newWasteState = (): WasteState => ({ reads: new Map(), writes: new 
 const wasteState: WasteState = newWasteState()
 let nudgesOn = true
 
+/** This prompt's efficiency counts, for the log: waste caught, helpers moved, the size Claude gave it. */
+const promptStats: { wasteCount: number; wasteTokens: number; guarded: number; size?: 'S' | 'M' | 'L' } = { wasteCount: 0, wasteTokens: 0, guarded: 0 }
+
 /** One thing a finished call wasted: what the agent is told, what Alerts lists, roughly how many tokens it cost. */
 export type WasteHit = { kind: 'reread' | 'retry' | 'big'; nudge: string; notice: string; tokens: number }
 
@@ -2957,6 +3098,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
     `- Waste nudges: ${nudgesOn ? 'on' : 'off'} (/muka nudges on, /muka nudges off)`,
     `- Model guard: ${modelGuardOn ? 'on' : 'off'} (/muka models on, /muka models off)`,
+    '- Report: /muka report (the last 7 days: spend by model, helper and size, waste caught, suggestions)',
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
     '- Both panel and rules at once: /muka all on, /muka all off',
     '- Setup: /muka setup installs the helper agents, the status line and the settings; /muka setup undo puts back what it replaced',
@@ -3147,6 +3289,10 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     return { text: recapText(entries, label) }
   }
   if (words[0] === 'smart') return setSmart($, words[1] !== 'off')
+  if (words[0] === 'report') {
+    const days = Math.min(LOG_DAYS_KEPT, Math.max(1, Number(words[1]) || 7))
+    return { text: efficiencyReport(await readLogDays($, days), days) }
+  }
   if (words[0] === 'models') {
     const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !modelGuardOn
     modelGuardOn = want
@@ -3269,7 +3415,10 @@ export const register: Register = on => {
   on('prompt.context', async ($, e, next) => {
     const smart = (await $.store.get('smart').catch(() => undefined)) !== false
     if (!smart) return next(e)
-    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: MUKA_CORE }] })
+    const tune = sizingNote(await readLogDays($, 7).catch(() => [])) ?? ''
+    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: tune ? `${MUKA_CORE}
+
+${tune}` : MUKA_CORE }] })
   })
 
   // A prompt that looks large brings the full large-task steps with it, once
@@ -3328,6 +3477,7 @@ ${MUKA_LARGE}`] })
           steps: [],
           stepCount: 0,
         }
+        if (guarded) promptStats.guarded += 1
         if (guarded) await addNotice($, 'waste', agent.type, `asked for ${guarded}, ran on ${call.model} (the rules' model for ${agent.type})`)
         await update($, agents, list => [...list.filter(a => a.id !== agent.id), agent].slice(-50))
         await refreshStatus($)
@@ -3377,7 +3527,11 @@ ${MUKA_LARGE}`] })
         const hits = wasteCheck(wasteState, { agent: e.agentId ?? 'main', tool: e.tool, args, isError: ran.isError === true, text: typeof ran.text === 'string' ? ran.text : '', at: Date.now() })
         const extra = [...hits.map(h => h.nudge), ...(e.agentId === undefined ? wasteState.pendingMain.splice(0) : [])]
         if (extra.length > 0) out = { ...out, context: [...(out.context ?? []), ...extra] } as typeof ran
-        for (const h of hits) await addNotice($, 'waste', who, `${h.notice} (~${kTokens(h.tokens)} tokens)`)
+        for (const h of hits) {
+          promptStats.wasteCount += 1
+          promptStats.wasteTokens += h.tokens
+          await addNotice($, 'waste', who, `${h.notice} (~${kTokens(h.tokens)} tokens)`)
+        }
       }
     } catch {
       // Best effort.
@@ -3454,6 +3608,20 @@ ${MUKA_LARGE}`] })
     return blocked ?? next(e)
   }).catch(($, e, next) => next(e))
 
+  // The size Claude gives a task ("Size: M"), from Main's own text, for the sizing check.
+  on('turn.step', async function* ($, e, next) {
+    const step = yield* next(e)
+    try {
+      if (e.agentId === undefined && promptStats.size === undefined && step.answer) {
+        const size = sizeIn(step.answer)
+        if (size) promptStats.size = size
+      }
+    } catch {
+      // Best effort: the step passes as it came.
+    }
+    return step
+  })
+
   on('turn.start', async ($, e, next) => {
     const started = await next(e)
     if (e.agentId !== undefined) {
@@ -3467,6 +3635,7 @@ ${MUKA_LARGE}`] })
       await update($, selected, () => '')
       await update($, activity, () => [])
       await update($, focus, () => '')
+      Object.assign(promptStats, { wasteCount: 0, wasteTokens: 0, guarded: 0, size: undefined })
       const prompt = clip(clean(e.text), 120)
       await update($, main, m => ({ ...m, current: undefined, isWorking: true, stepCount: 0, turnStartedAt: Date.now(), turnEndedAt: undefined, prompt, promptCostStart: m.costUsd ?? 0, promptBudget: undefined, budgetStage: 0 }))
     } else {
@@ -3532,6 +3701,13 @@ ${MUKA_LARGE}`] })
         files: files.map(c => baseName(c.path)).slice(0, 30),
         tokens: recap.tokens,
         costUsd: costUsd > 0 ? costUsd : undefined,
+        agentSteps: recap.agentSteps,
+        ...promptSpend(usage, model, list),
+        cacheRate: recap.cacheRate,
+        wasteCount: promptStats.wasteCount,
+        wasteTokens: promptStats.wasteTokens,
+        guarded: promptStats.guarded,
+        ...(promptStats.size ? { size: promptStats.size } : {}),
       }).catch(() => undefined)
       await pingDone($, info, e.durationMs).catch(() => undefined)
     }

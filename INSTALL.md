@@ -31,3 +31,6 @@ The person pasted the short prompt from the README. Do these steps in order and 
 | `/muka guard on` / `/muka guard off` | Ask before shell commands delete files (off by default) |
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
 | `/muka recap` | Today's finished prompts |
+| `/muka report` | Efficiency over the last week, with suggestions |
+| `/muka nudges on` / `/muka nudges off` | Waste nudges to the agent (on by default) |
+| `/muka models on` / `/muka models off` | The helper model guard (on by default) |

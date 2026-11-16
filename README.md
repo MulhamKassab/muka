@@ -48,6 +48,9 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
 | `/muka motion on` / `/muka motion off` | The panel's animations (on by default; also ⏸ on the Bridge) |
 | `/muka recap` / `/muka recap yesterday` | The day's finished prompts |
+| `/muka report` / `/muka report 14` | Efficiency over the last 7 (or up to 14) days, with suggestions |
+| `/muka nudges on` / `/muka nudges off` | Tell the agent about waste as it happens (on by default) |
+| `/muka models on` / `/muka models off` | Keep helpers on the rules' models (on by default) |
 
 `/orbit`, `/helm` and `/savvy` are old names for `/muka`.
 
@@ -60,6 +63,17 @@ While smart is on, Muka adds the coordination rules to every new chat, the same 
 - **Helpers:** Explore on Haiku; builder and reviewer on Sonnet; never Haiku for code; reports of 150 words at most; the advisor once per large plan or when an error repeats.
 - **Stop rules:** a stuck helper is steered or replaced; a budget, if you set one, wraps up at 70% and stops at 100%.
 - **Questions:** one option marked recommended; if you're away it goes ahead with it, except for deleting, spending or sending.
+
+Every chat gets a short core of the rules; the full large-task steps join only when a prompt looks large (long, a list of parts, or words like "refactor" or "one by one"), once per conversation and again after a compaction.
+
+## Smarter, cheaper work
+
+Muka does more than show the agents: it keeps them efficient.
+
+- **Waste nudges:** the agent is told at once, on the result that showed it, when it reads a file again that nothing has changed, runs the same failing command a second time, takes a result of more than ~5k tokens whole, or fills its context past 70%. Each one is listed under ♻️ in ⚠️ Alerts with its rough token cost.
+- **Model guard:** a helper that asks for a model the rules don't allow runs on the right one: Explore on Haiku, builder and reviewer on Sonnet, no other helper on Opus or Fable (the checker is left alone). Marked ⤵ in the Orbit.
+- **Report:** `/muka report` sums the last week: spend by model, by helper and by task size, the cache rate, the waste caught, the costliest prompts, and suggestions drawn from those numbers.
+- **Self-tuning sizes:** Muka compares the size Claude gave each task ("Size: M") with what it really took. When Claude keeps sizing too small (or calling small tasks L), the next chat's rules say so.
 
 ## Setup
 
@@ -100,4 +114,4 @@ The line under the message box is Muka's **pulse**. It shows the most urgent thi
 
 Off by default. With `/muka guard on`, before a `Bash` or `PowerShell` command deletes files, Muka shows what it would remove and asks **Delete them** or **Block it**. Anything but Delete them blocks it, including a question that closes on its own. It reads common delete commands (`rm`, `del`, `Remove-Item`, `git clean -f`, `find -delete` and others), including ones wrapped in `sudo`, `bash -c`, `powershell -c` or `$(...)`. It cannot see deletes inside scripts or programs it runs, and it is a safety net, not a sandbox.
 
-Apart from the delete guard, pings, setup and the notes you send, Muka only watches: it never changes or blocks an agent's work.
+Apart from the delete guard, the model guard, pings, setup and the notes it and you send, Muka only watches: it never changes or blocks an agent's work.

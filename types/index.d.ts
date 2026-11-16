@@ -109,6 +109,23 @@ export type LogEntry = {
   files: string[]
   tokens: number
   costUsd?: number
+  /** Steps the helpers took. */
+  agentSteps?: number
+  /** Estimated spend by model family, in US dollars. */
+  byModel?: Record<string, number>
+  /** Estimated spend by who spent it: 'Main' or a helper type, in US dollars. */
+  byHelper?: Record<string, number>
+  /** How many helpers of each type ran. */
+  helperCount?: Record<string, number>
+  /** Share of Main's input the cache served, 0-100. */
+  cacheRate?: number
+  /** Waste Muka pointed out: how many times, and about how many tokens. */
+  wasteCount?: number
+  wasteTokens?: number
+  /** Helpers the model guard moved to the rules' model. */
+  guarded?: number
+  /** The size Claude gave the task ("Size: M"), if it gave one. */
+  size?: 'S' | 'M' | 'L'
 }
 
 export type NoticeKind =
