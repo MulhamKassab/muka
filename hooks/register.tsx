@@ -1735,36 +1735,38 @@ const MOTION_CSS =
 /** Whether Muka's pictures move (/muka motion on|off); a reduce-motion system setting always wins. */
 let motionOn = true
 
-/** A picture's own width and height, read from its markup: an interactive frame does not size itself. */
-const svgW = (source: string): number => Number(source.match(/^<svg[^>]*?\swidth="([\d.]+)"/)?.[1] ?? HELM_W)
-const svgH = (source: string): number => Number(source.match(/^<svg[^>]*?\sheight="([\d.]+)"/)?.[1] ?? 200)
-
 /** A staggered start for the n-th item of a list. */
 const delay = (n: number, step = 0.06): string => `animation-delay:${(n * step).toFixed(2)}s`
 
 const helmHue = (s: SubAgentStatus | 'stuck'): string =>
   s === 'stuck' ? H.red : s === 'running' ? H.cyan : s === 'done' ? H.green : s === 'stopped' ? H.amber : H.red
 
-/** A Helm card: the panel's own background, a soft border (red when something is stuck). */
-const card = (W: number, Hh: number, body: string, stroke: string = H.line, opts: { live?: boolean; aurora?: number } = {}): string =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}">` +
-  `<style>${HELM_CSS}${motionOn ? MOTION_CSS : ''}</style>` +
-  DEFS +
-  `<clipPath id="cardclip"><rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16"/></clipPath>` +
-  `<rect x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="url(#bg)" stroke="${stroke}" stroke-width="1.5"/>` +
-  // An aurora drifting behind the head of the card.
-  (opts.aurora
-    ? `<g clip-path="url(#cardclip)" filter="url(#blur)" opacity=".5">` +
-      `<ellipse class="drift" style="--tx:40px;--ty:6px" cx="70" cy="${opts.aurora * 0.35}" rx="95" ry="34" fill="${H.cyan}" fill-opacity=".35"/>` +
-      `<ellipse class="drift" style="--tx:-50px;--ty:10px;animation-duration:17s" cx="230" cy="${opts.aurora * 0.2}" rx="90" ry="30" fill="${H.violet}" fill-opacity=".3"/>` +
-      `<ellipse class="drift" style="--tx:-30px;--ty:-8px;animation-duration:21s" cx="${W - 40}" cy="${opts.aurora * 0.6}" rx="80" ry="30" fill="#DB2777" fill-opacity=".22"/></g>`
-    : '') +
-  // While Main works, a light runs around the border.
-  (opts.live
-    ? `<rect class="border-run" pathLength="100" x="0.75" y="0.75" width="${W - 1.5}" height="${Hh - 1.5}" rx="16" fill="none" stroke="url(#brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="12 88"/>`
-    : '') +
-  `<g class="fade">${body}</g>` +
-  `</svg>`
+// How large a picture may grow: it fills the panel's width up to this, keeping its shape.
+const PIC_MAX_W = 560
+
+/**
+ * A Muka picture, drawn straight on the panel: no frame or background of its
+ * own, laid out at HELM_W and scaled by the panel to its width (up to
+ * PIC_MAX_W), so it fits any panel size. While Main works, a light runs along
+ * a line at the top; red when something is stuck.
+ */
+const card = (W: number, Hh: number, body: string, stroke: string = H.line, opts: { live?: boolean; aurora?: number } = {}): string => {
+  const isStuck = stroke === H.red
+  const k = PIC_MAX_W / W
+  const top =
+    opts.live || isStuck
+      ? `<rect x="20" y="3" width="${W - 40}" height="3" rx="1.5" fill="${isStuck ? H.red : 'url(#brand)'}" opacity="${isStuck ? 0.85 : 0.35}" class="${isStuck ? 'pulse' : ''}"/>` +
+        (isStuck ? '' : `<clipPath id="topclip"><rect x="20" y="3" width="${W - 40}" height="3" rx="1.5"/></clipPath><g clip-path="url(#topclip)"><rect class="shine" style="--w:${W}px;animation-duration:2.2s" x="0" y="3" width="70" height="3" fill="url(#brand)"/></g>`)
+      : ''
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${(W * k).toFixed(0)}" height="${(Hh * k).toFixed(0)}" viewBox="0 0 ${W} ${Hh}">` +
+    `<style>${HELM_CSS}${motionOn ? MOTION_CSS : ''}</style>` +
+    DEFS +
+    top +
+    `<g class="fade">${body}</g>` +
+    `</svg>`
+  )
+}
 
 /** The prompt's budget and spend, or undefined with no budget or no cost reading yet. */
 export const budgetState = (info: MainInfo, fallback: number | undefined): { budget: number; spent: number; pct: number } | undefined => {
@@ -1992,7 +1994,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       const bh = a.status === 'done' ? H.green : H.red
       parts.push(
         `<g class="pop" style="animation-delay:.5s"><circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="6" fill="${bh}" stroke="#FFFFFF" stroke-width="1.5"/>` +
-          `<text x="${bx.toFixed(1)}" y="${(by + 3).toFixed(1)}" text-anchor="middle" style="font:900 8.5px ${FONT};fill:#FFFFFF">${a.status === 'done' ? '✓' : '✗'}</text></g>`,
+          `<text x="${bx.toFixed(1)}" y="${(by + 3).toFixed(1)}" text-anchor="middle" class="chip" style="font-size:8.5px;font-weight:900;fill:#FFFFFF">${a.status === 'done' ? '✓' : '✗'}</text></g>`,
       )
     }
     const right = x >= cx
@@ -3405,7 +3407,7 @@ export const register: Register = on => {
     if (e.surface === 'desktop') {
       const { Svg } = $.ui.resolve(e)
       const card = bridgeStrip(info, list, defaultBudget)
-      header = current === 'flow' ? [] : [<Svg isInteractive source={card.source} width={svgW(card.source)} height={svgH(card.source)} alt={card.alt} />]
+      header = current === 'flow' ? [] : [<Svg source={card.source} alt={card.alt} />]
     }
 
     // Subscribe to the 30-second tick, so times and alerts stay current.
@@ -3440,7 +3442,7 @@ export const register: Register = on => {
     const pic = (c: { source: string; alt: string }): RenderChildren => {
       if (!deskSvg) return <Text> </Text>
       const Pic = deskSvg
-      return <Pic isInteractive source={c.source} width={svgW(c.source)} height={svgH(c.source)} alt={c.alt} />
+      return <Pic source={c.source} alt={c.alt} />
     }
     const page = (body: RenderChildren) =>
       isDesk ? (
@@ -3540,7 +3542,7 @@ export const register: Register = on => {
         const { Svg } = $.ui.resolve(e)
         const chart = timelineChart(spans)
         const spend = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        return page([<Text bold>Mission: who ran when</Text>, <Svg isInteractive source={chart.source} width={svgW(chart.source)} height={svgH(chart.source)} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg isInteractive source={spend.source} width={svgW(spend.source)} height={svgH(spend.source)} alt={spend.alt} />])
+        return page([<Text bold>Mission: who ran when</Text>, <Svg source={chart.source} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg source={spend.source} alt={spend.alt} />])
       }
       const lines = timelineText(spans)
       const room = Math.max(2, rows - 13)
@@ -3565,7 +3567,7 @@ export const register: Register = on => {
       if (e.surface === 'desktop') {
         const { Svg } = $.ui.resolve(e)
         const spendCard = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        spendPicture.push(<Svg isInteractive source={spendCard.source} width={svgW(spendCard.source)} height={svgH(spendCard.source)} alt={spendCard.alt} />)
+        spendPicture.push(<Svg source={spendCard.source} alt={spendCard.alt} />)
       }
       if (isDesk) {
         const agentRows: BarRow[] = [
@@ -3906,7 +3908,7 @@ export const register: Register = on => {
       // The Bridge as one card, then a button per agent.
       const bridge = bridgeCard(info, list, await read($, activity), defaultBudget)
       return page([
-        <Svg isInteractive source={bridge.source} width={svgW(bridge.source)} height={svgH(bridge.source)} alt={bridge.alt} />,
+        <Svg source={bridge.source} alt={bridge.alt} />,
         openers,
         // The pause control for the moving pictures (hover any dot, gauge or bar for its details).
         <Button key="motion-toggle" label={motionOn ? '⏸ Pause animations' : '▶ Play animations'} dimColor onPress={() => setMotion($, !motionOn)} />,

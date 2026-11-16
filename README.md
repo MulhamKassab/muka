@@ -90,7 +90,7 @@ A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 
 - **🧊 Cache:** a ring for all agents and a bar per agent.
 - **💡 Reflect:** the last turn as tiles, and an AI review on demand.
 
-The pictures move: the Orbit's rings turn, working helpers pulse and ping, links to them flow, Main breathes with a comet circling it while it works, gauges sweep in, bars grow, tiles and steps pop in. Hover any dot, gauge, bar, tile or step for its details. ⏸ Pause animations under the Bridge (or `/muka motion off`) stops them, and a system "reduce motion" setting always keeps them still.
+The pictures move: the Orbit's rings turn, working helpers pulse and ping, links to them flow, Main breathes with a comet circling it while it works, gauges sweep in, bars grow, tiles and steps pop in. ⏸ Pause animations under the Bridge (or `/muka motion off`) stops them, and a system "reduce motion" setting always keeps them still.
 
 In the terminal and editors the same views are text.
 
