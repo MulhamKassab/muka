@@ -79,7 +79,7 @@ A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 
   - The Orbit: Main in the centre and helpers around it, each with its model, time, steps and cost.
   - Gauges for the usage limit, context and cache, and the latest steps.
 
-  Under the card is 🎯 Steer: pick an agent, type a note or press a quick one (⏸ Wrap up, 🚫 No helpers, 🗺 Explain, 🐢 Smaller steps, 💰 Keep it cheap). The note reaches the agent at its next step, so it keeps working. A button per agent opens its details, with Steer and Stop.
+  Under the card, a button per agent opens its details, with Steer and Stop.
 - **📜 Activity:** a lane per agent with a dot per step (failures in red) and the latest steps.
 - **⚠️ Alerts:** tiles for failed, denied, risky, outside the project, stuck and warnings, and the latest events.
 - **📝 Changes:** a bar per changed file (red outside the project), ± to see its diff, and deletes.

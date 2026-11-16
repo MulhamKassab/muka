@@ -3633,45 +3633,10 @@ export const register: Register = on => {
 
     // The flow chart: an SVG on desktop, top-down while it fits, else the list.
     if (e.surface === 'desktop') {
-      const { Svg, Input } = $.ui.resolve(e)
-      // The Bridge as one card, laid out like the Helm design, then steering
-      // (who, a typed note, one-press notes, the last note's state) and a
-      // button per agent.
+      const { Svg } = $.ui.resolve(e)
+      // The Bridge as one card, then a button per agent.
       const bridge = bridgeCard(info, list, await read($, activity), defaultBudget)
-      const to = await read($, steerTo)
-      const running = list.filter(a => a.status === 'running')
-      const target = to !== 'main' && running.some(a => a.id === to) ? to : 'main'
-      const last = (await read($, steer)).at(-1)
-      const QUICK: { key: string; label: string; preset: string }[] = [
-        { key: 'quick-wrap', label: '⏸ Wrap up', preset: 'wrap' },
-        { key: 'quick-nohelpers', label: '🚫 No helpers', preset: 'nohelpers' },
-        { key: 'quick-explain', label: '🗺 Explain', preset: 'explain' },
-        { key: 'quick-smaller', label: '🐢 Smaller steps', preset: 'smaller' },
-        { key: 'quick-cheaper', label: '💰 Keep it cheap', preset: 'cheaper' },
-      ]
-      // Steering comes first: a press redraws the pane and it scrolls back to
-      // the top, so the controls and the "sent" line must be up there.
       return page([
-        <Text bold>🎯 Steer</Text>,
-        <Box flexDirection="row" flexWrap="wrap" gap={1}>
-          <Button key="steer-to-main" label={`${agentIcon('main')} Main`} variant={target === 'main' ? 'primary' : 'secondary'} onPress={() => update($, steerTo, () => 'main')} />
-          {running.slice(0, 8).map(a => (
-            <Button key={`steer-to-${a.id}`} label={`${agentIcon(a.type)} ${clip(a.type, 14)}`} variant={target === a.id ? 'primary' : 'secondary'} onPress={() => update($, steerTo, () => a.id)} />
-          ))}
-        </Box>,
-        <Input key="steer-text" placeholder="Tell it something; it keeps working" submitLabel="Send" onSubmit={text => sendSteer($, text)} />,
-        <Box flexDirection="row" flexWrap="wrap" gap={1}>
-          {QUICK.map(q => (
-            <Button key={q.key} label={q.label} onPress={() => sendSteer($, STEER_PRESETS.find(p => p.key === q.preset)!.text)} />
-          ))}
-        </Box>,
-        last ? (
-          <Text dimColor>
-            {last.deliveredAt ? '✓ read' : '… waiting'} · {last.toLabel}: {clip(last.text, 60)}
-          </Text>
-        ) : (
-          <Text> </Text>
-        ),
         <Svg source={bridge.source} alt={bridge.alt} />,
         openers,
       ])
