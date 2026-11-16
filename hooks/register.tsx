@@ -1735,6 +1735,10 @@ const MOTION_CSS =
 /** Whether Muka's pictures move (/muka motion on|off); a reduce-motion system setting always wins. */
 let motionOn = true
 
+/** A picture's own width and height, read from its markup: an interactive frame does not size itself. */
+const svgW = (source: string): number => Number(source.match(/^<svg[^>]*?\swidth="([\d.]+)"/)?.[1] ?? HELM_W)
+const svgH = (source: string): number => Number(source.match(/^<svg[^>]*?\sheight="([\d.]+)"/)?.[1] ?? 200)
+
 /** A staggered start for the n-th item of a list. */
 const delay = (n: number, step = 0.06): string => `animation-delay:${(n * step).toFixed(2)}s`
 
@@ -3401,7 +3405,7 @@ export const register: Register = on => {
     if (e.surface === 'desktop') {
       const { Svg } = $.ui.resolve(e)
       const card = bridgeStrip(info, list, defaultBudget)
-      header = current === 'flow' ? [] : [<Svg isInteractive source={card.source} alt={card.alt} />]
+      header = current === 'flow' ? [] : [<Svg isInteractive source={card.source} width={svgW(card.source)} height={svgH(card.source)} alt={card.alt} />]
     }
 
     // Subscribe to the 30-second tick, so times and alerts stay current.
@@ -3436,7 +3440,7 @@ export const register: Register = on => {
     const pic = (c: { source: string; alt: string }): RenderChildren => {
       if (!deskSvg) return <Text> </Text>
       const Pic = deskSvg
-      return <Pic isInteractive source={c.source} alt={c.alt} />
+      return <Pic isInteractive source={c.source} width={svgW(c.source)} height={svgH(c.source)} alt={c.alt} />
     }
     const page = (body: RenderChildren) =>
       isDesk ? (
@@ -3536,7 +3540,7 @@ export const register: Register = on => {
         const { Svg } = $.ui.resolve(e)
         const chart = timelineChart(spans)
         const spend = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        return page([<Text bold>Mission: who ran when</Text>, <Svg isInteractive source={chart.source} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg isInteractive source={spend.source} alt={spend.alt} />])
+        return page([<Text bold>Mission: who ran when</Text>, <Svg isInteractive source={chart.source} width={svgW(chart.source)} height={svgH(chart.source)} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg isInteractive source={spend.source} width={svgW(spend.source)} height={svgH(spend.source)} alt={spend.alt} />])
       }
       const lines = timelineText(spans)
       const room = Math.max(2, rows - 13)
@@ -3561,7 +3565,7 @@ export const register: Register = on => {
       if (e.surface === 'desktop') {
         const { Svg } = $.ui.resolve(e)
         const spendCard = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        spendPicture.push(<Svg isInteractive source={spendCard.source} alt={spendCard.alt} />)
+        spendPicture.push(<Svg isInteractive source={spendCard.source} width={svgW(spendCard.source)} height={svgH(spendCard.source)} alt={spendCard.alt} />)
       }
       if (isDesk) {
         const agentRows: BarRow[] = [
@@ -3902,7 +3906,7 @@ export const register: Register = on => {
       // The Bridge as one card, then a button per agent.
       const bridge = bridgeCard(info, list, await read($, activity), defaultBudget)
       return page([
-        <Svg isInteractive source={bridge.source} alt={bridge.alt} />,
+        <Svg isInteractive source={bridge.source} width={svgW(bridge.source)} height={svgH(bridge.source)} alt={bridge.alt} />,
         openers,
         // The pause control for the moving pictures (hover any dot, gauge or bar for its details).
         <Button key="motion-toggle" label={motionOn ? '⏸ Pause animations' : '▶ Play animations'} dimColor onPress={() => setMotion($, !motionOn)} />,

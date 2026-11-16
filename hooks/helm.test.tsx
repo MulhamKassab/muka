@@ -153,6 +153,9 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   const alt = String(pictures[0]!.props.alt)
   expect(alt).toMatch(/^Muka\. .*Agent tree. .*Usage limit .*Recent: .*builder Read/)
   const source = String(pictures[0]!.props.source)
+  // An interactive picture is given its own size, or the panel draws it tiny.
+  expect(pictures[0]!.props.width).toBe(400)
+  expect(pictures[0]!.props.height).toBe(Number(source.match(/^<svg[^>]*?\sheight="([\d.]+)"/)![1]))
   expect(source).toContain('width="400"')
   expect(source).toContain('>MAIN<')
   expect(source).toContain('>CONTEXT<')
