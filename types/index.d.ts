@@ -119,6 +119,7 @@ export type NoticeKind =
   | 'delete-blocked'
   | 'delete-unasked'
   | 'cost'
+  | 'waste'
 
 /** One thing you should know about: a failure, a risky command, a delete. */
 export type Notice = {

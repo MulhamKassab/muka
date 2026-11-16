@@ -2778,6 +2778,100 @@ const sendSteer = async ($: EngineInterface, text: string): Promise<void> => {
   await Promise.resolve($.ui.toast(isRepeat ? `Already waiting for ${toLabel}` : `🎯 Sent to ${toLabel}: it reads it at its next step`)).catch(() => undefined)
 }
 
+// ---------------------------------------------------------------------------
+// Waste catchers: Muka watches for the usual token waste and tells the agent
+// at once, on the very result that showed it, so the next step is cheaper.
+
+/** A result longer than this (in characters) is called out. */
+export const WASTE_BIG = 20_000
+
+export type WasteState = {
+  /** When each agent last read each file range: "agent|path|offset|limit" -> time. */
+  reads: Map<string, number>
+  /** When each file was last changed by Edit, Write or NotebookEdit: path -> time. */
+  writes: Map<string, number>
+  /** Failures in a row of the same call by the same agent: "agent|tool|call" -> count. */
+  fails: Map<string, number>
+  /** Whether the main agent has been told its context is filling. */
+  ctxNudged: boolean
+  /** Nudges waiting for the main agent's next tool result. */
+  pendingMain: string[]
+}
+
+export const newWasteState = (): WasteState => ({ reads: new Map(), writes: new Map(), fails: new Map(), ctxNudged: false, pendingMain: [] })
+
+const wasteState: WasteState = newWasteState()
+let nudgesOn = true
+
+/** One thing a finished call wasted: what the agent is told, what Alerts lists, roughly how many tokens it cost. */
+export type WasteHit = { kind: 'reread' | 'retry' | 'big'; nudge: string; notice: string; tokens: number }
+
+const wpath = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
+
+/**
+ * Checks one finished tool call for waste and updates what Muka remembers.
+ * The agent key is 'main' or a subagent's id; `text` is the result as the
+ * model read it.
+ */
+export const wasteCheck = (
+  st: WasteState,
+  c: { agent: string; tool: string; args: Record<string, unknown>; isError: boolean; text: string; at: number },
+): WasteHit[] => {
+  const hits: WasteHit[] = []
+  const path = typeof c.args.file_path === 'string' ? c.args.file_path : typeof c.args.notebook_path === 'string' ? c.args.notebook_path : undefined
+  const tokens = Math.round(c.text.length / 4)
+  // The same call failing again: say so at the second failure, and again at the fourth.
+  const what = typeof c.args.command === 'string' ? clean(c.args.command) : path ? wpath(path) : JSON.stringify(c.args).slice(0, 300)
+  const failKey = `${c.agent}|${c.tool}|${what}`
+  if (c.isError) {
+    const n = (st.fails.get(failKey) ?? 0) + 1
+    st.fails.set(failKey, n)
+    if (n === 2 || n === 4) {
+      hits.push({
+        kind: 'retry',
+        nudge: `Muka: this ${c.tool} call has now failed ${n} times the same way. Don't run it again unchanged: read the error, change the approach, or (main agent) consult the advisor.`,
+        notice: `${c.tool} failed ${n}× the same way: ${clip(what, 80)}`,
+        tokens,
+      })
+    }
+    return hits
+  }
+  st.fails.delete(failKey)
+  if (path && (c.tool === 'Edit' || c.tool === 'Write' || c.tool === 'NotebookEdit' || c.tool === 'MultiEdit')) st.writes.set(wpath(path), c.at)
+  if (path && c.tool === 'Read') {
+    const key = `${c.agent}|${wpath(path)}|${String(c.args.offset ?? '')}|${String(c.args.limit ?? '')}`
+    const before = st.reads.get(key)
+    const wrote = st.writes.get(wpath(path)) ?? 0
+    if (before !== undefined && before > wrote) {
+      hits.push({
+        kind: 'reread',
+        nudge: `Muka: you already read ${baseName(path)} (same range) at ${clock(before)}, and no Edit or Write has touched it since. Reuse what you read unless a command changed it.`,
+        notice: `read ${baseName(path)} again, unchanged since ${clock(before)}`,
+        tokens,
+      })
+    }
+    st.reads.set(key, c.at)
+  }
+  if (c.text.length > WASTE_BIG && c.tool !== 'Agent' && c.tool !== 'Task') {
+    hits.push({
+      kind: 'big',
+      nudge: `Muka: that ${c.tool} result was about ${kTokens(tokens)} tokens. Next time search (Grep), read a line range (offset/limit), or trim the output (head, tail, a filter) instead of taking it whole.`,
+      notice: `${c.tool} returned ~${kTokens(tokens)} tokens: ${clip(what, 60)}`,
+      tokens,
+    })
+  }
+  return hits
+}
+
+/** The nudge for a filling context, once per climb past 70%. */
+export const contextNudge = (st: WasteState, percent: number | undefined): string | undefined => {
+  if (percent === undefined) return undefined
+  if (percent < 60) st.ctxNudged = false
+  if (percent < 70 || st.ctxNudged) return undefined
+  st.ctxNudged = true
+  return `Muka: the context is ${Math.round(percent)}% full. Finish the piece in hand, keep tool output small, and hand big reading to a helper, so nothing important is lost when it is compacted.`
+}
+
 /** /muka smart on|off: the rules for new chats, and a note so this chat follows the change at once. */
 const setSmart = async ($: EngineInterface, want: boolean): Promise<{ text: string }> => {
   const was = isSmart
@@ -2812,6 +2906,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Delete guard: ${isGuardOn ? 'on' : 'off'} (/muka guard on, /muka guard off)`,
     `- Pings: ${pingsOn ? 'on' : 'off'} (/muka ping on, /muka ping off)`,
     `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
+    `- Waste nudges: ${nudgesOn ? 'on' : 'off'} (/muka nudges on, /muka nudges off)`,
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
     '- Both panel and rules at once: /muka all on, /muka all off',
     '- Setup: /muka setup installs the helper agents, the status line and the settings; /muka setup undo puts back what it replaced',
@@ -3002,6 +3097,16 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     return { text: recapText(entries, label) }
   }
   if (words[0] === 'smart') return setSmart($, words[1] !== 'off')
+  if (words[0] === 'nudge' || words[0] === 'nudges') {
+    const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !nudgesOn
+    nudgesOn = want
+    await $.store.set('nudges', want)
+    return {
+      text: want
+        ? 'Muka nudges on: re-reads, retry loops, huge outputs and a filling context are pointed out to the agent at once, and listed under ♻️ in Alerts.'
+        : 'Muka nudges off: waste is no longer pointed out.',
+    }
+  }
   if (words[0] === 'motion' || words[0] === 'animations') {
     const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !motionOn
     await setMotion($, want)
@@ -3074,6 +3179,7 @@ export const register: Register = on => {
     isGuardOn = (await $.store.get('guard')) === true
     pingsOn = (await $.store.get('pings')) !== false
     motionOn = (await $.store.get('motion')) !== false
+    nudgesOn = (await $.store.get('nudges')) !== false
     const storedBudget = await $.store.get('budget').catch(() => undefined)
     defaultBudget = storedBudget === null ? undefined : typeof storedBudget === 'number' && storedBudget > 0 ? storedBudget : undefined
     sessionId = (await $.session.id().catch(() => undefined)) ?? `session-${Date.now()}`
@@ -3171,6 +3277,18 @@ export const register: Register = on => {
       }
     } catch {
       // Best effort: the result goes back as it came.
+    }
+    // Waste catchers: a re-read, a retry loop or a huge result is pointed out
+    // on this very result; a filling context waits for Main's next one.
+    try {
+      if (nudgesOn && ran.deny === undefined && !isGuardQuestion && !isOwnPush) {
+        const hits = wasteCheck(wasteState, { agent: e.agentId ?? 'main', tool: e.tool, args, isError: ran.isError === true, text: typeof ran.text === 'string' ? ran.text : '', at: Date.now() })
+        const extra = [...hits.map(h => h.nudge), ...(e.agentId === undefined ? wasteState.pendingMain.splice(0) : [])]
+        if (extra.length > 0) out = { ...out, context: [...(out.context ?? []), ...extra] } as typeof ran
+        for (const h of hits) await addNotice($, 'waste', who, `${h.notice} (~${kTokens(h.tokens)} tokens)`)
+      }
+    } catch {
+      // Best effort.
     }
     if (!recorded) return out
     try {
@@ -3342,6 +3460,14 @@ export const register: Register = on => {
       costUsd: e.cost?.usd ?? m.costUsd,
     }))
     await checkBudget($).catch(() => undefined)
+    // A filling context: Main hears about it on its next tool result.
+    if (nudgesOn) {
+      const nudge = contextNudge(wasteState, ctx.percent)
+      if (nudge) {
+        wasteState.pendingMain.push(nudge)
+        await addNotice($, 'waste', 'Main', `context ${Math.round(ctx.percent ?? 0)}% full`).catch(() => undefined)
+      }
+    }
     await refreshStatus($)
     return measured
   })
@@ -3719,6 +3845,7 @@ export const register: Register = on => {
         'delete-blocked': { mark: '■', color: 'red' },
         'delete-unasked': { mark: '!', color: 'yellow' },
         cost: { mark: '$', color: 'yellow' },
+        waste: { mark: '♻', color: 'yellow' },
       }
       const room = Math.max(3, rows - 13 - warn.length)
       const recent = [...notes].reverse().slice(0, room)
@@ -3738,8 +3865,9 @@ export const register: Register = on => {
           { icon: '📁', value: String(n('outside')), label: 'outside project', hue: C.red, isOn: n('outside') > 0 },
           { icon: '⏳', value: String(stuckNow.length), label: 'stuck now', hue: C.red, isOn: stuckNow.length > 0 },
           { icon: '💡', value: String(warn.length + n('cost')), label: 'warnings', hue: C.amber, isOn: warn.length + n('cost') > 0 },
+          { icon: '♻️', value: String(n('waste')), label: 'waste caught', hue: C.green, isOn: n('waste') > 0 },
         ]
-        const ICON: Partial<Record<NoticeKind, string>> = { failed: '❌', error: '❌', denied: '🚫', risky: '⚠️', outside: '📁', 'delete-confirmed': '🗑️', 'delete-blocked': '⛔', 'delete-unasked': '🗑️', cost: '💲' }
+        const ICON: Partial<Record<NoticeKind, string>> = { failed: '❌', error: '❌', denied: '🚫', risky: '⚠️', outside: '📁', 'delete-confirmed': '🗑️', 'delete-blocked': '⛔', 'delete-unasked': '🗑️', cost: '💲', waste: '♻️' }
         const latest = [
           ...warn.map(w => ({ icon: '💡', who: 'Muka', what: w, hue: C.amber })),
           ...recent.slice(0, 8).map(x => ({ icon: ICON[x.kind] ?? '⚠️', who: x.agent, what: hidePaths(x.text), hue: x.kind === 'failed' || x.kind === 'error' || x.kind === 'outside' ? C.red : C.text })),
