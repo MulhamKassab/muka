@@ -1680,60 +1680,57 @@ const shinyBar = (x: number, y: number, w: number, h: number, fill: string, extr
 
 /**
  * Motion, only for people who have not asked their system to reduce motion,
- * and only while /muka motion is on (the pause control). Opacity and transform
- * where possible; nothing flashes faster than about twice a second.
+ * and only while /muka motion is on (the pause control). The panel replaces
+ * the picture whenever its numbers change, so there are no entrance
+ * animations (they would replay on every redraw), and every loop starts at
+ * the point the wall clock says it has reached: a redraw continues the
+ * motion instead of snapping it back. An element's own offset is its --s.
  */
-const MOTION_CSS =
+const LOOPS: [cls: string, keyframes: string, seconds: number, rest: string][] = [
+  ['pulse', 'mk-pulse', 1.6, 'ease-in-out infinite'],
+  ['pulse-fast', 'mk-pulse', 0.7, 'ease-in-out infinite'],
+  ['flow', 'mk-flow', 0.9, 'linear infinite'],
+  ['spin', 'mk-spin', 80, 'linear infinite'],
+  ['spin-back', 'mk-spin', 120, 'linear infinite reverse'],
+  ['comet', 'mk-spin', 6, 'linear infinite'],
+  ['orbit-fast', 'mk-spin', 3.5, 'linear infinite'],
+  ['ping', 'mk-ping', 2, 'ease-out infinite'],
+  ['breathe', 'mk-breathe', 2.4, 'ease-in-out infinite'],
+  ['halo', 'mk-halo', 2.6, 'ease-in-out infinite'],
+  ['travel', 'mk-travel', 1.9, 'ease-in-out infinite'],
+  ['twinkle', 'mk-twinkle', 3.4, 'ease-in-out infinite'],
+  ['shine', 'mk-shine', 2.8, 'ease-in-out infinite'],
+  ['float', 'mk-wobble', 3, 'ease-in-out infinite'],
+  ['bob', 'mk-bob', 4, 'ease-in-out infinite'],
+]
+
+const motionCss = (now: number): string =>
   `@media (prefers-reduced-motion:no-preference){` +
   `@keyframes mk-pulse{50%{opacity:.35}}` +
   `@keyframes mk-flow{to{stroke-dashoffset:-18}}` +
   `@keyframes mk-spin{to{rotate:360deg}}` +
   `@keyframes mk-ping{from{scale:1;opacity:.55}to{scale:2.4;opacity:0}}` +
   `@keyframes mk-breathe{50%{scale:1.07}}` +
-  `@keyframes mk-sweep{from{stroke-dashoffset:var(--d)}}` +
-  `@keyframes mk-rise{from{opacity:0;translate:0 8px}}` +
-  `@keyframes mk-grow{from{scale:0 1}}` +
-  `@keyframes mk-pop{from{opacity:0;scale:.4}}` +
-  `.pulse{animation:mk-pulse 1.6s ease-in-out infinite}` +
-  `.pulse-fast{animation:mk-pulse .7s ease-in-out infinite}` +
-  `.flow{animation:mk-flow .9s linear infinite}` +
-  `.spin{transform-box:view-box;animation:mk-spin 80s linear infinite}` +
-  `.spin-back{transform-box:view-box;animation:mk-spin 120s linear infinite reverse}` +
-  `.comet{transform-box:view-box;animation:mk-spin 6s linear infinite}` +
-  `.ping{transform-box:fill-box;transform-origin:center;animation:mk-ping 2s ease-out infinite}` +
-  `.breathe{transform-box:fill-box;transform-origin:center;animation:mk-breathe 2.4s ease-in-out infinite}` +
-  `.sweep{animation:mk-sweep 1s cubic-bezier(.2,.8,.2,1) both}` +
-  `.rise{animation:mk-rise .5s ease-out both}` +
-  `.grow{transform-box:fill-box;transform-origin:left;animation:mk-grow .8s cubic-bezier(.2,.8,.2,1) both}` +
-  `.pop{transform-box:fill-box;transform-origin:center;animation:mk-pop .45s cubic-bezier(.3,1.4,.5,1) both}` +
+  `@keyframes mk-halo{50%{opacity:.9;scale:1.18}}` +
   `@keyframes mk-travel{0%{opacity:0;translate:0 0}15%,80%{opacity:1}100%{opacity:0;translate:var(--dx) var(--dy)}}` +
   `@keyframes mk-twinkle{50%{opacity:.12}}` +
   `@keyframes mk-shine{from{translate:0 0}to{translate:var(--w) 0}}` +
-  `@keyframes mk-halo{50%{opacity:.9;scale:1.18}}` +
-  `@keyframes mk-fade{from{opacity:0}}` +
   `@keyframes mk-wobble{50%{translate:0 -2px}}` +
-  `.travel{animation:mk-travel 1.9s ease-in-out infinite}` +
-  `.twinkle{animation:mk-twinkle 3.4s ease-in-out infinite}` +
-  `.shine{opacity:1;animation:mk-shine 2.8s ease-in-out infinite}` +
-  `.halo{transform-box:fill-box;transform-origin:center;opacity:.5;animation:mk-halo 2.6s ease-in-out infinite}` +
-  `.orbit-fast{transform-box:view-box;animation:mk-spin 3.5s linear infinite}` +
-  `.fade{animation:mk-fade .6s ease-out both}` +
-  `.float{animation:mk-wobble 3s ease-in-out infinite}` +
-  `@keyframes mk-run{to{stroke-dashoffset:-100}}` +
-  `@keyframes mk-drift{to{translate:var(--tx) var(--ty)}}` +
-  `@keyframes mk-draw{from{stroke-dashoffset:1}}` +
   `@keyframes mk-bob{50%{translate:0 -3px}}` +
-  `.border-run{opacity:1;animation:mk-run 5s linear infinite}` +
-  `.drift{animation:mk-drift 13s ease-in-out infinite alternate}` +
-  `.draw{animation:mk-draw 1.6s cubic-bezier(.3,.7,.3,1) both}` +
-  `.bob{animation:mk-bob 4s ease-in-out infinite}` +
+  `.spin,.spin-back,.comet,.orbit-fast{transform-box:view-box}` +
+  `.ping,.breathe,.halo{transform-box:fill-box;transform-origin:center}` +
+  `.halo{opacity:.5}.shine,.travel{opacity:1}` +
+  LOOPS.map(([cls, kf, sec, rest]) => {
+    const phase = ((now / 1000) % sec).toFixed(2)
+    return `.${cls}{animation:${kf} ${sec}s ${rest};animation-delay:calc(var(--s,0s) - ${phase}s)}`
+  }).join('') +
   `}`
 
 /** Whether Muka's pictures move (/muka motion on|off); a reduce-motion system setting always wins. */
 let motionOn = true
 
 /** A staggered start for the n-th item of a list. */
-const delay = (n: number, step = 0.06): string => `animation-delay:${(n * step).toFixed(2)}s`
+const delay = (n: number, step = 0.06): string => `--s:${(n * step).toFixed(2)}s`
 
 const helmHue = (s: SubAgentStatus | 'stuck'): string =>
   s === 'stuck' ? H.red : s === 'running' ? H.cyan : s === 'done' ? H.green : s === 'stopped' ? H.amber : H.red
@@ -1757,7 +1754,7 @@ const card = (W: number, Hh: number, body: string, stroke: string = H.line, opts
       : ''
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${(W * k).toFixed(0)}" height="${(Hh * k).toFixed(0)}" viewBox="0 0 ${W} ${Hh}">` +
-    `<style>${HELM_CSS}${motionOn ? MOTION_CSS : ''}</style>` +
+    `<style>${HELM_CSS}${motionOn ? motionCss(Date.now()) : ''}</style>` +
     DEFS +
     top +
     `<g class="fade">${body}</g>` +
@@ -1944,7 +1941,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       const dx = (to.x - from.x).toFixed(1)
       const dy = (to.y - from.y).toFixed(1)
       for (let k = 0; k < 3; k++) {
-        parts.push(`<circle class="travel" style="--dx:${dx}px;--dy:${dy}px;animation-delay:${(k * 0.63).toFixed(2)}s" cx="${from.x.toFixed(1)}" cy="${from.y.toFixed(1)}" r="2.6" fill="${hue}"/>`)
+        parts.push(`<circle class="travel" style="--dx:${dx}px;--dy:${dy}px;--s:${(k * 0.63).toFixed(2)}s" cx="${from.x.toFixed(1)}" cy="${from.y.toFixed(1)}" r="2.6" fill="${hue}"/>`)
       }
     }
   })
@@ -1970,7 +1967,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const hollow = a.status === 'stopped'
     const live = a.status === 'running'
     const tip = `${a.type} · ${a.model} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${plural(a.stepCount ?? 0, 'step')} · ${duration((a.endedAt ?? now) - a.startedAt)}${estimateUsd(a.usage, a.model) > 0 ? ` · ${usd(estimateUsd(a.usage, a.model))}` : ''}`
-    parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title><g class="bob" style="animation-delay:${(-i * 0.7).toFixed(1)}s">`)
+    parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title><g class="bob" style="--s:${(-i * 0.7).toFixed(1)}s">`)
     if (live) {
       parts.push(`<circle class="halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size + 7}" fill="${hue}" fill-opacity=".14"/>`)
       parts.push(`<circle class="ping" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="none" stroke="${hue}" stroke-width="1.5"/>`)
@@ -1986,7 +1983,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       const by = y - size * 0.75
       const bh = a.status === 'done' ? H.green : H.red
       parts.push(
-        `<g class="pop" style="animation-delay:.5s"><circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="6" fill="${bh}" stroke="#FFFFFF" stroke-width="1.5"/>` +
+        `<g class="pop" style="--s:.5s"><circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="6" fill="${bh}" stroke="#FFFFFF" stroke-width="1.5"/>` +
           `<text x="${bx.toFixed(1)}" y="${(by + 3).toFixed(1)}" text-anchor="middle" class="chip" style="font-size:8.5px;font-weight:900;fill:#FFFFFF">${a.status === 'done' ? '✓' : '✗'}</text></g>`,
       )
     }
@@ -2024,7 +2021,7 @@ const ringGauge = (gx: number, gy: number, r: number, value: number | undefined,
     out += `<circle class="sweep" style="--d:${arc}" cx="${gx}" cy="${gy}" r="${r}" fill="none" stroke="${grad('a', hue)}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${arc} ${len.toFixed(1)}" transform="rotate(-90 ${gx} ${gy})"/>`
     // A glowing bead at the arc's tip, appearing as the sweep lands.
     const t = -Math.PI / 2 + (2 * Math.PI * v) / 100
-    out += `<circle class="pop" style="animation-delay:.85s" cx="${(gx + r * Math.cos(t)).toFixed(1)}" cy="${(gy + r * Math.sin(t)).toFixed(1)}" r="${(sw / 2 + 1.2).toFixed(1)}" fill="#FFFFFF" stroke="${hue}" stroke-width="2"/>`
+    out += `<circle class="pop" style="--s:.85s" cx="${(gx + r * Math.cos(t)).toFixed(1)}" cy="${(gy + r * Math.sin(t)).toFixed(1)}" r="${(sw / 2 + 1.2).toFixed(1)}" fill="#FFFFFF" stroke="${hue}" stroke-width="2"/>`
   }
   out += `<text x="${gx}" y="${gy + 5}" class="hn" text-anchor="middle" style="font-weight:800;font-size:${r >= 30 ? 17 : 14}px;fill:${value === undefined ? H.faint : hue}">${value === undefined ? '–' : `${Math.round(value)}%`}</text>`
   out += `<text x="${gx}" y="${gy + r + sw + 14}" class="hl" text-anchor="middle">${label}</text></g>`
@@ -2187,7 +2184,7 @@ const sparkBody = (feed: ActivityItem[], live: boolean, x: number, y: number, w:
     `<path class="fade" d="${area}" fill="url(#spark)"/>` +
     `<path class="draw" pathLength="1" stroke-dasharray="1" d="${d}" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><title>${xml(`${feed.length} steps since your last prompt`)}</title></path>` +
     (live ? `<circle class="ping" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="none" stroke="#DB2777"/>` : '') +
-    `<circle class="pop" style="animation-delay:1.4s" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#DB2777" stroke-width="2.2"/>`
+    `<circle class="pop" style="--s:1.4s" cx="${last.px.toFixed(1)}" cy="${last.py.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#DB2777" stroke-width="2.2"/>`
   return { parts, alt: `Pace: ${feed.length} steps, about ${rate.toFixed(1)} a minute.` }
 }
 
