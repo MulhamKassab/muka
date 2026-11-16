@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { contextNudge, newWasteState, WASTE_BIG, wasteCheck } from './register'
+import { contextNudge, guardModel, newWasteState, WASTE_BIG, wasteCheck } from './register'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type On = Parameters<Body>[1]
@@ -80,4 +80,36 @@ test('the nudges reach the agent on the result that showed the waste, and Alerts
   const quiet = (await $.tool.call({ tool: 'Read', file_path: 'C:\\work\\z.ts' } as never)) as { context?: string[] }
   expect(quiet.context ?? []).toEqual([])
   expect((await $.command.run({ command: 'muka', args: '' } as never)).text).toMatch(/Waste nudges: off/)
+})
+
+test('the model guard keeps helpers on the rules\' models', () => {
+  expect(guardModel('Explore', 'sonnet')).toBe('haiku')
+  expect(guardModel('Explore', 'claude-opus-5-5')).toBe('haiku')
+  expect(guardModel('Explore', 'haiku')).toBeUndefined()
+  expect(guardModel('builder', 'haiku')).toBe('sonnet')
+  expect(guardModel('reviewer', 'opus')).toBe('sonnet')
+  expect(guardModel('builder', 'sonnet')).toBeUndefined()
+  expect(guardModel('general-purpose', 'fable')).toBe('sonnet')
+  expect(guardModel('general-purpose', 'haiku')).toBeUndefined()
+  // Left alone: the checker, forks, and a helper that names no model.
+  expect(guardModel('checker', 'opus')).toBeUndefined()
+  expect(guardModel('fork', 'opus')).toBeUndefined()
+  expect(guardModel('Explore', undefined)).toBeUndefined()
+})
+
+test('a helper asking for the wrong model is started on the right one, and marked', async ($, on) => {
+  engine(on)
+  const asked: (string | undefined)[] = []
+  on('agent.spawn', (_, e) => {
+    asked.push(e.model)
+    return { model: e.model === 'haiku' ? 'claude-haiku-5-5' : 'claude-opus-5-5', agentId: `agent-${asked.length}` }
+  })
+  await $.session.start({ cwd: 'C:\work', surface: 'terminal', isInteractive: true } as never)
+  await $.turn.start({ turnId: 't1', text: 'look around' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'opus' } as never)
+  expect(asked).toEqual(['haiku'])
+  // Switched off, the helper gets what it asked for.
+  await $.command.run({ command: 'muka', args: 'models off' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'opus' } as never)
+  expect(asked).toEqual(['haiku', 'opus'])
 })

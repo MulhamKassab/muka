@@ -28,6 +28,8 @@ export type SubAgent = {
   type: string
   description: string
   model: string
+  /** The model it asked for, when Muka's model guard ran it on another. */
+  guardedFrom?: string
   status: SubAgentStatus
   startedAt: number
   endedAt?: number

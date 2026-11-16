@@ -1995,7 +1995,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const fit = (perChar: number) => Math.max(4, Math.floor(px / perChar))
     const cost = estimateUsd(a.usage, a.model)
     const took = duration((a.endedAt ?? now) - a.startedAt)
-    const modelLine = `${a.model} · ${took}`
+    const modelLine = `${a.guardedFrom ? "⤵ " : ""}${a.model} · ${took}`
     const stats = [plural(a.stepCount ?? 0, 'step'), cost > 0 ? usd(cost) : ''].filter(Boolean).join(' · ')
     const mark = a.status === 'done' ? ' ✓' : isStuck ? ' ⚠' : a.status === 'failed' ? ' ✗' : ''
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 6).toFixed(1)}" class="ht tag" text-anchor="${anchor}" style="font-size:12.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(`${clip(a.type, Math.min(nameMax, fit(7.4) - 2))}${mark}`)}</text>`)
@@ -2863,6 +2863,27 @@ export const wasteCheck = (
   return hits
 }
 
+// ---------------------------------------------------------------------------
+// Helper model guard: the rules' helper models, kept before a helper starts.
+
+let modelGuardOn = true
+
+/**
+ * The model a helper should run on when the one it asked for breaks the
+ * rules, or undefined to leave it: Explore on Haiku; builder and reviewer on
+ * Sonnet (never Haiku for code, never a pricier model); no other helper on
+ * Opus or Fable. The checker (Opus, on request) and forks are left alone; so
+ * is a helper that names no model (its own definition decides).
+ */
+export const guardModel = (type: string, model: string | undefined): 'haiku' | 'sonnet' | undefined => {
+  if (!model || type === 'fork' || type === 'checker') return undefined
+  const f = family(model)
+  if (!f) return undefined
+  if (type === 'Explore') return f === 'haiku' ? undefined : 'haiku'
+  if (type === 'builder' || type === 'reviewer') return f === 'sonnet' ? undefined : 'sonnet'
+  return f === 'opus' || f === 'fable' ? 'sonnet' : undefined
+}
+
 /** The nudge for a filling context, once per climb past 70%. */
 export const contextNudge = (st: WasteState, percent: number | undefined): string | undefined => {
   if (percent === undefined) return undefined
@@ -2907,6 +2928,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Pings: ${pingsOn ? 'on' : 'off'} (/muka ping on, /muka ping off)`,
     `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
     `- Waste nudges: ${nudgesOn ? 'on' : 'off'} (/muka nudges on, /muka nudges off)`,
+    `- Model guard: ${modelGuardOn ? 'on' : 'off'} (/muka models on, /muka models off)`,
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
     '- Both panel and rules at once: /muka all on, /muka all off',
     '- Setup: /muka setup installs the helper agents, the status line and the settings; /muka setup undo puts back what it replaced',
@@ -3097,6 +3119,16 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     return { text: recapText(entries, label) }
   }
   if (words[0] === 'smart') return setSmart($, words[1] !== 'off')
+  if (words[0] === 'models') {
+    const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !modelGuardOn
+    modelGuardOn = want
+    await $.store.set('models', want)
+    return {
+      text: want
+        ? 'Muka model guard on: Explore runs on Haiku, builder and reviewer on Sonnet, and no other helper on Opus or Fable, whatever model it asks for (the checker is left alone). Marked ⤵ in the Orbit.'
+        : 'Muka model guard off: helpers run on the model they ask for.',
+    }
+  }
   if (words[0] === 'nudge' || words[0] === 'nudges') {
     const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !nudgesOn
     nudgesOn = want
@@ -3180,6 +3212,7 @@ export const register: Register = on => {
     pingsOn = (await $.store.get('pings')) !== false
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
+    modelGuardOn = (await $.store.get('models')) !== false
     const storedBudget = await $.store.get('budget').catch(() => undefined)
     defaultBudget = storedBudget === null ? undefined : typeof storedBudget === 'number' && storedBudget > 0 ? storedBudget : undefined
     sessionId = (await $.session.id().catch(() => undefined)) ?? `session-${Date.now()}`
@@ -3221,9 +3254,21 @@ export const register: Register = on => {
     return closed
   }).catch(($, e, next) => next(e))
 
-  // Observe every subagent start; never change or refuse it.
+  // Observe every subagent start. The one change: with the model guard on, a
+  // helper that asked for a model the rules don't allow runs on the right one.
   on('agent.spawn', async ($, e, next) => {
-    const started = await next(e)
+    let guarded: string | undefined
+    let call = e
+    try {
+      const want = modelGuardOn ? guardModel(e.subagentType, e.model) : undefined
+      if (want) {
+        guarded = e.model
+        call = { ...e, model: want }
+      }
+    } catch {
+      // A slip in the guard leaves the spawn as asked.
+    }
+    const started = await next(call)
     try {
       if (started.agentId) {
         const agent: SubAgent = {
@@ -3232,11 +3277,13 @@ export const register: Register = on => {
           type: clean(e.subagentType) || 'agent',
           description: clean(e.description),
           model: shortModel(started.model),
+          ...(guarded ? { guardedFrom: guarded } : {}),
           status: 'running',
           startedAt: Date.now(),
           steps: [],
           stepCount: 0,
         }
+        if (guarded) await addNotice($, 'waste', agent.type, `asked for ${guarded}, ran on ${call.model} (the rules' model for ${agent.type})`)
         await update($, agents, list => [...list.filter(a => a.id !== agent.id), agent].slice(-50))
         await refreshStatus($)
       }
