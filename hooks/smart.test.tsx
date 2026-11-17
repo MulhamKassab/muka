@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { actualSize, contextNudge, efficiencyReport, guardModel, looksLarge, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
-import type { LogEntry } from '../types'
+import { actualSize, contextNudge, efficiencyReport, guardModel, helperBrief, levelOf, spawnLimit, looksLarge, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
+import type { LogEntry, SubAgent } from '../types'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type On = Parameters<Body>[1]
@@ -83,18 +83,20 @@ test('the nudges reach the agent on the result that showed the waste, and Alerts
   expect((await $.command.run({ command: 'muka', args: '' } as never)).text).toMatch(/Waste nudges: off/)
 })
 
-test('the model guard keeps helpers on the rules\' models', () => {
-  expect(guardModel('Explore', 'sonnet')).toBe('haiku')
-  expect(guardModel('Explore', 'claude-opus-5-5')).toBe('haiku')
-  expect(guardModel('Explore', 'haiku')).toBeUndefined()
-  expect(guardModel('builder', 'haiku')).toBe('sonnet')
-  expect(guardModel('reviewer', 'opus')).toBe('sonnet')
+test('the model guard leaves the master pick alone and stops only clear waste', () => {
+  // The master's picks stand.
+  expect(guardModel('Explore', 'sonnet')).toBeUndefined()
+  expect(guardModel('reviewer', 'opus')).toBeUndefined()
+  expect(guardModel('builder', 'opus')).toBeUndefined()
   expect(guardModel('builder', 'sonnet')).toBeUndefined()
-  expect(guardModel('general-purpose', 'fable')).toBe('sonnet')
-  expect(guardModel('general-purpose', 'haiku')).toBeUndefined()
+  // Clear waste: reading on Opus or Fable, code on Haiku, Fable unasked.
+  expect(guardModel('Explore', 'claude-opus-5-5')).toBe('haiku')
+  expect(guardModel('builder', 'haiku')).toBe('sonnet')
+  expect(guardModel('general-purpose', 'haiku')).toBe('sonnet')
+  expect(guardModel('general-purpose', 'fable')).toBe('opus')
   // Left alone: the checker, forks, and a helper that names no model.
   expect(guardModel('checker', 'opus')).toBeUndefined()
-  expect(guardModel('fork', 'opus')).toBeUndefined()
+  expect(guardModel('fork', 'fable')).toBeUndefined()
   expect(guardModel('Explore', undefined)).toBeUndefined()
 })
 
@@ -175,4 +177,42 @@ test('review fixes: different failing edits are not a retry loop; a solo task of
   expect(wasteCheck(st, edit('two'))).toEqual([])
   expect(wasteCheck(st, edit('two')).map(h => h.kind)).toEqual(['retry'])
   expect(actualSize(entry({ mainSteps: 20 }))).toBe('S')
+})
+
+const sub = (over: Partial<SubAgent>): SubAgent => ({ id: 'a', type: 'builder', description: 'd', model: 'sonnet', status: 'running', startedAt: 0, steps: [], stepCount: 0, ...over })
+
+test('sub-masters: two levels at most, three live helpers per agent, and a short brief', () => {
+  const list = [sub({ id: 'b1' }), sub({ id: 'b2', parentId: 'b1' })]
+  expect(levelOf(list, undefined)).toBe(1)
+  expect(levelOf(list, 'b1')).toBe(2)
+  expect(levelOf(list, 'b2')).toBe(3)
+  expect(spawnLimit(list, undefined)).toBeUndefined()
+  expect(spawnLimit(list, 'b1')).toBeUndefined()
+  expect(spawnLimit(list, 'b2')).toMatch(/nesting limit/)
+  const busy = [sub({ id: 'b1' }), ...[1, 2, 3].map(n => sub({ id: `k${n}`, parentId: 'b1' }))]
+  expect(spawnLimit(busy, 'b1')).toMatch(/at most 3 helpers/)
+  expect(spawnLimit(busy.map(a => (a.id === 'k1' ? { ...a, status: 'done' as const } : a)), 'b1')).toBeUndefined()
+  expect(helperBrief(1)).toMatch(/may run it as a sub-master/)
+  expect(helperBrief(2)).toMatch(/deepest level: do your piece yourself/)
+  expect(helperBrief(1).length).toBeLessThan(1200)
+})
+
+test('a helper gets the brief with its prompt, and a spawn past two levels is refused', async ($, on) => {
+  engine(on)
+  const prompts: string[] = []
+  on('agent.spawn', (_, e) => {
+    prompts.push(e.prompt)
+    return { model: 'claude-sonnet-5-5', agentId: `agent-${prompts.length}` }
+  })
+  await $.session.start({ cwd: 'C:\work', surface: 'terminal', isInteractive: true } as never)
+  await $.turn.start({ turnId: 't1', text: 'build it' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Piece A', prompt: 'do A' } as never)
+  expect(prompts[0]).toMatch(/^do A\n\nMuka \(the user's coordination rules\), for this helper at level 1 of 2/)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'look', parentAgentId: 'agent-1' } as never)
+  expect(prompts[1]).toBe('look')
+  await $.agent.spawn({ subagentType: 'builder', description: 'Part', prompt: 'do part', parentAgentId: 'agent-1' } as never)
+  expect(prompts[2]).toMatch(/level 2 of 2/)
+  const deep = (await $.agent.spawn({ subagentType: 'builder', description: 'Too deep', prompt: 'x', parentAgentId: 'agent-3' } as never)) as { deny?: string }
+  expect(deep.deny).toMatch(/nesting limit/)
+  expect(prompts).toHaveLength(3)
 })

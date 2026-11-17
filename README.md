@@ -60,7 +60,9 @@ While smart is on, Muka adds the coordination rules to every new chat, the same 
 
 - **Size every task first:** S (do it yourself), M (Haiku `Explore` helpers read, you build), L (plan then swarm), careful mode (as L, plus your approval, tests first and the `checker`).
 - **Plan then swarm** for large tasks: scout, a PLAN.md with pieces and interfaces, one `builder` per independent piece, fit, one review.
-- **Helpers:** Explore on Haiku; builder and reviewer on Sonnet; never Haiku for code; reports of 150 words at most; the advisor once per large plan or when an error repeats.
+- **Model and effort per helper:** the master picks both for every helper by what the piece needs: Haiku/low for searching and reading, Sonnet/medium for routine code, Sonnet/high for tricky work, Opus/high for hard reasoning the result depends on, Fable only when you ask. It starts low and steps up only after a real shortfall; never Haiku for code.
+- **Sub-masters:** a helper whose piece splits into independent parts may run it like the master: plan it, start its own helpers, fit and test, report up. Limits keep usage down: two levels at most (master, helper, sub-helper), three live helpers per agent, M or L pieces only, readers never start helpers, reports of 150 words at every level. Muka refuses a spawn past the limits.
+- **Reports and the advisor:** reports of 150 words at most; the advisor once per large plan or when an error repeats (main session only).
 - **Stop rules:** a stuck helper is steered or replaced; a budget, if you set one, wraps up at 70% and stops at 100%.
 - **Questions:** one option marked recommended; if you're away it goes ahead with it, except for deleting, spending or sending.
 
@@ -71,7 +73,8 @@ Every chat gets a short core of the rules; the full large-task steps join only w
 Muka does more than show the agents: it keeps them efficient.
 
 - **Waste nudges:** the agent is told at once, on the result that showed it, when it reads a file again that nothing has changed, runs the same failing command a second time, takes a result of more than ~5k tokens whole, or fills its context past 70%. Each one is listed under ♻️ in ⚠️ Alerts with its rough token cost.
-- **Model guard:** a helper that asks for a model the rules don't allow runs on the right one: Explore on Haiku, builder and reviewer on Sonnet, no other helper on Opus or Fable (the checker is left alone). Marked ⤵ in the Orbit.
+- **Model guard:** the master's model picks stand; Muka only stops clear waste: Explore never on Opus or Fable (it runs on Haiku), code never written on Haiku (Sonnet instead), and Fable only with the guard off. Marked ⤵ in the Orbit.
+- **Helper brief:** every helper that writes code gets a short version of the rules with its task (about 150 tokens), so it can act as a sub-master within the limits.
 - **Report:** `/muka report` sums the last week: spend by model, by helper and by task size, the cache rate, the waste caught, the costliest prompts, and suggestions drawn from those numbers.
 - **Self-tuning sizes:** Muka compares the size Claude gave each task ("Size: M") with what it really took. When Claude keeps sizing too small (or calling small tasks L), the next chat's rules say so.
 
@@ -92,7 +95,7 @@ A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 
 
 - **🧭 Bridge**, one card:
   - MUKA with the clock and spend, what is happening now, the phase bar and where the plan stands.
-  - The Orbit: Main in the centre and helpers around it, each with its model, time, steps and cost.
+  - The Orbit: Main in the centre and every helper and sub-helper around it as a tree, each with its model, time, and what it is doing right now (▸) or its steps and cost when done. A helper that started its own wears a violet ring and says how many it runs.
   - Gauges for the usage limit, context and cache, and the latest steps.
 
   Under the card, a button per agent opens its details, with Steer and Stop.
