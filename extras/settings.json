@@ -1,7 +1,4 @@
 {
-  "env": {
-    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
-  },
   "model": "sonnet",
   "statusLine": {
     "type": "command",

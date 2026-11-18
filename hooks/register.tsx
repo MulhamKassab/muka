@@ -3333,6 +3333,15 @@ export const mergeMukaSettings = (cur: Record<string, unknown>, add: Record<stri
     if (k === 'env' && v && typeof v === 'object' && had && typeof had === 'object') out[k] = { ...(had as object), ...(v as object) }
     else out[k] = v
   }
+  // An earlier Muka setup forced every helper onto Haiku, which overrode the
+  // master's own model picks: taken back when it still holds Muka's value.
+  const env = out.env as Record<string, unknown> | undefined
+  if (env && typeof env === 'object' && env.CLAUDE_CODE_SUBAGENT_MODEL === 'haiku') {
+    const { CLAUDE_CODE_SUBAGENT_MODEL: _gone, ...rest } = env
+    void _gone
+    if (Object.keys(rest).length > 0) out.env = rest
+    else delete out.env
+  }
   return out
 }
 

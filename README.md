@@ -1,6 +1,6 @@
 # Muka
 
-Muka brings together everything that makes Claude Code work as a cheap, well-run team:
+Muka helps Claude Code work as a well-run team, and shows you what that team is doing and spending:
 
 - **The panel:** see your agents at a glance and steer them without interrupting.
 - **Smart rules:** coordination rules you switch on and off (task sizes, plan then swarm, helper models, stop rules, question rules).
@@ -69,7 +69,7 @@ While smart is on, Muka adds the coordination rules to every new chat, the same 
 
 Every chat gets a short core of the rules; the full large-task steps join only when a prompt looks large (long, a list of parts, or words like "refactor" or "one by one"), once per conversation and again after a compaction.
 
-## Smarter, cheaper work
+## Smarter work
 
 Muka does more than show the agents: it keeps them efficient.
 
@@ -85,9 +85,11 @@ Muka does more than show the agents: it keeps them efficient.
 
 - **Agents** in `~/.claude/agents`: `Explore` (Haiku, read-only), `builder` (Sonnet), `reviewer` (Sonnet, read-only), `checker` (Opus, read-only, only on request).
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
-- **Settings** merged into `~/.claude/settings.json`: Haiku for helpers that name no model, Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
+- **Settings** merged into `~/.claude/settings.json`: Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
 - **[Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance)**, Google Chrome's plugin of up-to-date web best practices (HTML, CSS, browser JavaScript, accessibility, performance): its marketplace and plugin are added to the settings, and the install prompt installs it.
 - **[REA, Reverse Engineer Anything](https://github.com/morluto/rea)**: tools for understanding how an app or feature works without its source code (native binaries, JavaScript and Electron apps, .NET assemblies, websites), with the evidence behind each finding. `/muka rea setup` installs or updates it for Claude Code in the background (REA's own setup, `npx rea-agents setup --client claude_code --yes`; a note says when it is done), `/muka rea` shows whether it is set up, and `/muka rea doctor` runs its checks. It needs Node.js 24.22.1 or newer (or 22.23.4+). Native-binary analysis can use Hopper, Ghidra, IDA or Kuna if you have one; JavaScript and web analysis needs none.
+
+Earlier versions also set `CLAUDE_CODE_SUBAGENT_MODEL=haiku`, which forced every helper onto Haiku and overrode the models the master picks; setup now takes that out if it still holds that value.
 
 Everything it replaces is copied first to `~/.claude/backups/muka-setup-<time>/`; `/muka setup undo` puts it back. Files it added new stay in place. If `settings.json` can't be read, setup changes nothing.
 
@@ -120,3 +122,17 @@ The line under the message box is Muka's **pulse**. It shows the most urgent thi
 Off by default. With `/muka guard on`, before a `Bash` or `PowerShell` command deletes files, Muka shows what it would remove and asks **Delete them** or **Block it**. Anything but Delete them blocks it, including a question that closes on its own. It reads common delete commands (`rm`, `del`, `Remove-Item`, `git clean -f`, `find -delete` and others), including ones wrapped in `sudo`, `bash -c`, `powershell -c` or `$(...)`. It cannot see deletes inside scripts or programs it runs, and it is a safety net, not a sandbox.
 
 Apart from the delete guard, the model guard, pings, setup and the notes it and you send, Muka only watches: it never changes or blocks an agent's work.
+
+## What Muka does on your computer
+
+Muka runs inside Claude Code as a plugin. Everything it does:
+
+- **Network:** none. Muka makes no network calls of its own.
+- **Programs it runs:** only `npx rea-agents …`, and only when you type `/muka rea setup` or `/muka rea doctor`.
+- **Files it writes:** only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
+- **Files it reads:** your settings during setup, `~/.claude.json` and `~/.claude/skills` for `/muka rea`, and the files the agents change (to show their diffs).
+- **Model calls:** one, the 💡 Reflect review, and only when you press it.
+- **What it changes in a conversation:** the rules block at the start of a chat (while smart is on), short notes added after tool results (waste nudges, budget warnings, your steering notes), a short brief added to the task of a helper that writes code, a helper's model when you turn the model guard on, and a refused shell command when you turn the delete guard on and answer Block.
+- **Notifications:** sounds, desktop notifications and phone pushes go through Claude Code's own notification features (`/muka ping off` stops them).
+
+Is it cheaper? Unproven yet. `/muka report` measures spend by model, helper and task size from your own prompts; give it a week, and compare a week with `/muka smart off`.

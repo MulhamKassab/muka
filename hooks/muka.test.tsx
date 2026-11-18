@@ -26,7 +26,7 @@ const engine = (on: On, files: Map<string, string>, store: Record<string, unknow
   const norm = (p: string) => p.replace(/\\/g, '/')
   const shipped = (raw: string) => {
     const p = norm(raw)
-    if (p.endsWith('/extras/settings.json')) return JSON.stringify({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, model: 'sonnet', askUserQuestionTimeout: '60s' })
+    if (p.endsWith('/extras/settings.json')) return JSON.stringify({ env: { MUKA_TEST: '1' }, model: 'sonnet', askUserQuestionTimeout: '60s' })
     if (p.endsWith('/extras/statusline.js')) return '// status line'
     const m = p.match(/\/extras\/agents\/(.+\.md)$/)
     return m ? `---\nname: ${m[1]!.replace('.md', '')}\n---\nnew` : undefined
@@ -51,10 +51,10 @@ const HOME = 'C:/Users/tester/.claude'
 
 test('settings merge: env key by key, Muka keys replaced, plugins and marketplaces added without overriding yours', () => {
   const cur = { model: 'opus', env: { FOO: '1' }, enabledPlugins: { x: true, z: false }, extraKnownMarketplaces: { m: {} }, theme: 'dark' }
-  const add = { model: 'sonnet', env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, enabledPlugins: { y: true, z: true }, extraKnownMarketplaces: { g: { a: 1 } } }
+  const add = { model: 'sonnet', env: { MUKA_TEST: '1' }, enabledPlugins: { y: true, z: true }, extraKnownMarketplaces: { g: { a: 1 } } }
   expect(mergeMukaSettings(cur, add)).toEqual({
     model: 'sonnet',
-    env: { FOO: '1', CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' },
+    env: { FOO: '1', MUKA_TEST: '1' },
     enabledPlugins: { x: true, y: true, z: false },
     extraKnownMarketplaces: { m: {}, g: { a: 1 } },
     theme: 'dark',
@@ -72,7 +72,7 @@ test('/muka setup installs the agents, status line and settings, backs up what i
   expect(r.text).toMatch(/^Muka setup done:\n- agent: builder\n- agent: Explore\n- status line script\n- settings: env, model, askUserQuestionTimeout/)
   expect(files.get(`${HOME}/agents/builder.md`)).toMatch(/name: builder\n---\nnew/)
   expect(files.get(`${HOME}/statusline.js`)).toBe('// status line')
-  expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'sonnet', env: { FOO: '1', CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' }, enabledPlugins: { x: true }, askUserQuestionTimeout: '60s' })
+  expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'sonnet', env: { FOO: '1', MUKA_TEST: '1' }, enabledPlugins: { x: true }, askUserQuestionTimeout: '60s' })
   // What it replaced is kept under backups.
   const saved = [...files.keys()].filter(k => k.startsWith(`${HOME}/backups/muka-setup-2`))
   expect(saved.map(k => k.replace(/.*muka-setup-[^/]+\//, '')).sort()).toEqual(['agents/builder.md', 'settings.json'])
@@ -143,4 +143,10 @@ test('smart: the rules join each new conversation while on; switching tells the 
   expect(all.text).toMatch(/^Muka off: the panel and the smart rules\./)
   const status = await $.command.run({ command: 'muka', args: 'status' } as never)
   expect(status.text).toMatch(/- Panel: off .*\n- Smart rules: off /)
+})
+
+test('setup takes back the Haiku helper default an earlier Muka setup put in, and keeps a model you chose', () => {
+  expect(mergeMukaSettings({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku', FOO: '1' } }, { model: 'sonnet' })).toEqual({ env: { FOO: '1' }, model: 'sonnet' })
+  expect(mergeMukaSettings({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } }, {})).toEqual({})
+  expect(mergeMukaSettings({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'opus' } }, {})).toEqual({ env: { CLAUDE_CODE_SUBAGENT_MODEL: 'opus' } })
 })
