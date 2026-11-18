@@ -2004,9 +2004,56 @@ export const bridgeStrip = (info: MainInfo, list: SubAgent[], budget: number | u
 // Past this many agents the orbit shows the first ones and a count.
 const ORBIT_MAX = 16
 
+/** An agent as the orbit draws it: a real one, or a group of finished helpers of one type. */
+export type OrbitAgent = SubAgent & { count?: number; costUsd?: number }
+
+/** Past this many helpers the orbit is crowded: finished helpers group by type, and labels shorten. */
+export const ORBIT_CROWD = 6
+
+/**
+ * What the orbit draws: every helper while there are few; past ORBIT_CROWD,
+ * the running, failed and stuck helpers one by one, and the finished ones
+ * grouped by type ("builder ×9"), with their steps and cost summed.
+ */
+export const orbitAgents = (list: SubAgent[], now = Date.now()): { shown: OrbitAgent[]; crowded: boolean } => {
+  if (list.length <= ORBIT_CROWD) return { shown: list, crowded: false }
+  const stuck = new Set(stuckAgents(list, now).map(s => s.agent.id))
+  const single = list.filter(a => a.status === 'running' || a.status === 'failed' || stuck.has(a.id))
+  const ids = new Set(single.map(a => a.id))
+  const shown: OrbitAgent[] = single.map(a => (a.parentId !== undefined && !ids.has(a.parentId) ? { ...a, parentId: undefined } : a))
+  const groups = new Map<string, SubAgent[]>()
+  for (const a of list) if (!ids.has(a.id)) groups.set(a.type, [...(groups.get(a.type) ?? []), a])
+  for (const [type, members] of groups) {
+    if (members.length === 1) {
+      shown.push({ ...members[0]!, parentId: undefined })
+      continue
+    }
+    const models = new Map<string, number>()
+    for (const m of members) models.set(m.model, (models.get(m.model) ?? 0) + 1)
+    const model = [...models].sort((a, b) => b[1] - a[1])[0]![0]
+    shown.push({
+      id: `group:${type}`,
+      type,
+      description: `${members.length} finished ${type} helpers`,
+      model,
+      status: members.every(m => m.status === 'stopped') ? 'stopped' : 'done',
+      startedAt: Math.min(...members.map(m => m.startedAt)),
+      endedAt: Math.max(...members.map(m => m.endedAt ?? m.startedAt)),
+      steps: [],
+      stepCount: members.reduce((n, m) => n + (m.stepCount ?? 0), 0),
+      count: members.length,
+      costUsd: members.reduce((n, m) => n + estimateUsd(m.usage, m.model), 0),
+    })
+  }
+  return { shown, crowded: true }
+}
+
 /** The orbit's own marks around (cx, cy): Main at the centre, helpers on the inner ring, nested helpers outside. */
 const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy: number, r1: number, r2: number, nameMax: number, maxX = HELM_W): string => {
-  const rows = treeRows(list).slice(0, ORBIT_MAX)
+  const view = orbitAgents(list, now)
+  const all = view.shown
+  const crowded = view.crowded
+  const rows = treeRows(all).slice(0, ORBIT_MAX)
   const parents = treeParents(rows)
   const stuck = new Set(stuckAgents(list, now).map(s => s.agent.id))
   const top = rows.flatMap((r, i) => (parents[i] === undefined ? [i] : []))
@@ -2039,11 +2086,17 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     }
   }
   let start = -Math.PI / 2 - Math.PI / Math.max(2, total)
-  for (const i of top) {
+  top.forEach((i, k) => {
     const span = (2 * Math.PI * leaves[i]!) / total
     place(i, start, span)
+    if (crowded && k % 2 === 1) {
+      // Every other one sits further out.
+      const p = pos[i]!
+      const rr = r1 + 16
+      pos[i] = { ...p, x: Math.min(maxX - 105, Math.max(105, cx + rr * Math.cos(p.angle))), y: cy + rr * Math.sin(p.angle) }
+    }
     start += span
-  }
+  })
   const parts: string[] = []
   // A starfield behind the orbit: a faint dot grid and a few twinkling stars.
   parts.push(`<circle cx="${cx}" cy="${cy}" r="${r2 + 24}" fill="url(#dots)" opacity=".7"/>`)
@@ -2089,17 +2142,25 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       `<text class="ht tag" x="${cx}" y="${cy + 1}" text-anchor="middle" style="font-weight:900;font-size:13px;fill:url(#brand);letter-spacing:1px">MAIN</text>` +
       `<text x="${cx}" y="${cy + 15}" class="hs" text-anchor="middle" style="font-size:10px">${xml(shortModel(info.model))}</text></g>`,
   )
+  const rank = (a: SubAgent) => (stuck.has(a.id) ? 0 : a.status === 'running' ? 1 : a.status === 'failed' ? 2 : 3)
+  const labelled = new Set(
+    rows
+      .map((r, i) => ({ i, k: rank(r.agent) }))
+      .sort((p, q) => p.k - q.k || p.i - q.i)
+      .slice(0, ORBIT_CROWD)
+      .map(p => p.i),
+  )
   rows.forEach((r, i) => {
     const a = r.agent
     const { x, y } = pos[i]!
     const isStuck = stuck.has(a.id)
     const hue = isStuck ? H.red : helmHue(a.status)
-    const size = r.depth === 0 ? 13 : 9
+    const size = crowded ? (r.depth === 0 ? 11 : 8) : r.depth === 0 ? 13 : 9
     const hollow = a.status === 'stopped'
     const live = a.status === 'running'
     const tip = `${a.type} · ${a.model} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${plural(a.stepCount ?? 0, 'step')} · ${duration((a.endedAt ?? now) - a.startedAt)}${estimateUsd(a.usage, a.model) > 0 ? ` · ${usd(estimateUsd(a.usage, a.model))}` : ''}`
     parts.push(`<g class="node pop" style="${delay(i)}"><title>${xml(tip)}</title><g class="bob" style="--s:${(-i * 0.7).toFixed(1)}s">`)
-    const isSubMaster = list.some(c => c.parentId === a.id)
+    const isSubMaster = all.some(c => c.parentId === a.id)
     if (isSubMaster) parts.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size + 5}" fill="none" stroke="${H.violet}" stroke-width="1.6" stroke-dasharray="3 2.5"/>`)
     if (live) {
       parts.push(`<circle class="halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size + 7}" fill="${hue}" fill-opacity=".14"/>`)
@@ -2111,7 +2172,15 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     // The helper's own icon inside its sphere.
     parts.push(`<text x="${x.toFixed(1)}" y="${(y + size * 0.36).toFixed(1)}" text-anchor="middle" style="font-size:${(size * 1.05).toFixed(1)}px">${agentIcon(a.type)}</text>`)
     // A small badge on finished helpers: ✓ done, ✗ failed.
-    if (a.status === 'done' || a.status === 'failed') {
+    const count = (a as OrbitAgent).count
+    if (count) {
+      const bx = x + size * 0.8
+      const by = y - size * 0.8
+      parts.push(
+        `<circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="7.5" fill="${H.green}" stroke="#FFFFFF" stroke-width="1.5"/>` +
+          `<text x="${bx.toFixed(1)}" y="${(by + 3).toFixed(1)}" text-anchor="middle" class="chip" style="font-size:8.5px;font-weight:900;fill:#FFFFFF">${count}</text>`,
+      )
+    } else if (a.status === 'done' || a.status === 'failed') {
       const bx = x + size * 0.75
       const by = y - size * 0.75
       const bh = a.status === 'done' ? H.green : H.red
@@ -2126,16 +2195,26 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     // Room on this side, in characters at each line's size.
     const px = right ? maxX - 4 - lx : lx - 6
     const fit = (perChar: number) => Math.max(4, Math.floor(px / perChar))
-    const cost = estimateUsd(a.usage, a.model)
+    const cost = (a as OrbitAgent).costUsd ?? estimateUsd(a.usage, a.model)
     const took = duration((a.endedAt ?? now) - a.startedAt)
     const modelLine = `${a.guardedFrom ? "⤵ " : ""}${a.model} · ${took}`
     // A sub-master (a helper that started its own) says how many it runs.
-    const kids = list.filter(c => c.parentId === a.id)
+    const kids = all.filter(c => c.parentId === a.id)
     const kidsLive = kids.filter(c => c.status === 'running').length
     const stats = [plural(a.stepCount ?? 0, 'step'), cost > 0 ? usd(cost) : '', kids.length ? `${kids.length} sub${kidsLive ? ` (${kidsLive} live)` : ''}` : ''].filter(Boolean).join(' · ')
     // While it works, its third line is what it is doing right now.
     const doing = live ? a.steps.at(-1) : undefined
     const mark = a.status === 'done' ? ' ✓' : isStuck ? ' ⚠' : a.status === 'failed' ? ' ✗' : ''
+    if (crowded) {
+      if (labelled.has(i)) {
+        const name = `${clip(a.type, Math.min(nameMax, fit(7.4) - 4))}${count ? ` ×${count}` : ''}${count ? '' : mark}`
+        const second = doing ? `▸ ${stepText(doing)}` : [count ? '' : a.model, cost > 0 ? usd(cost) : '', plural(a.stepCount ?? 0, 'step')].filter(Boolean).join(' · ')
+        parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 2).toFixed(1)}" class="ht tag" text-anchor="${anchor}" style="font-size:11.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(name)}</text>`)
+        parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 10).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:10px;${doing ? `font-weight:600;fill:${hue}` : ''}">${xml(clip(second, fit(5.4)))}</text>`)
+      }
+      parts.push('</g></g>')
+      return
+    }
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 6).toFixed(1)}" class="ht tag" text-anchor="${anchor}" style="font-size:12.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(`${clip(a.type, Math.min(nameMax, fit(7.4) - 2))}${mark}`)}</text>`)
     parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 8).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:11px;fill:${hue}">${xml(clip(modelLine, fit(5.8)))}</text>`)
     parts.push(
@@ -2145,7 +2224,11 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     )
     parts.push('</g></g>')
   })
-  if (list.length > rows.length) parts.push(`<text x="${cx}" y="${cy + r2 + 20}" class="hs" text-anchor="middle">+${list.length - rows.length} more</text>`)
+  if (crowded) {
+    const c = counts(list)
+    const unlabelled = rows.length - labelled.size
+    parts.push(`<text x="${cx}" y="${cy + r2 + 13}" class="hs" text-anchor="middle" style="font-size:10.5px">${xml(`${plural(list.length, 'helper')}: ${c.running} working · ${c.finished} finished${unlabelled > 0 ? ` · ${unlabelled} unlabelled` : ''}`)}</text>`)
+  } else if (all.length > rows.length) parts.push(`<text x="${cx}" y="${cy + r2 + 20}" class="hs" text-anchor="middle">+${all.length - rows.length} more</text>`)
   if (rows.length === 0) parts.push(`<text x="${cx}" y="${cy + 52}" class="hs" text-anchor="middle" style="font-size:12px">no helpers</text>`)
   return parts.join('')
 }
