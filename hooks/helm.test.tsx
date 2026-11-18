@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { bridgeStrip, budgetState, orbitChart, planBudget, pulseLine, spendBar } from './register'
+import { bridgeStrip, budgetState, nextVerify, orbitChart, planBudget, pulseLine, spendBar, verifyChip, verifyEffect } from './register'
 import type { SubAgent } from '../types'
 
 const PANE = {
@@ -77,12 +77,18 @@ test('the Bridge strip, Orbit and spend bar are well-formed cards', () => {
 })
 
 const engine = (on: On) => {
+  const toasts: string[] = []
   mock.store(on, { budget: 1 })
   mock.env(on, {})
   mock.clock(on)
   let n = 0
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined } as never
+  })
+  on('session.append', (_, e, next) => next(e))
   on('session.surfaces', () => ({ value: [] }) as never)
-  on('command.register', () => ({ value: { command: 'helm' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -90,16 +96,17 @@ const engine = (on: On) => {
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: ['agent-1'][n++] ?? 'agent-x' }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('tool.call', () => ({ result: {} }) as never)
+  return toasts
 }
 
-const cost = (usd: number) => ({ context: { tokens: 1, window: 2, percent: 1 }, rateLimits: [], cost: { usd }, changed: ['cost'] }) as never
+const cost =(usd: number) => ({ context: { tokens: 1, window: 2, percent: 1 }, rateLimits: [], cost: { usd }, changed: ['cost'] }) as never
 
-test('/muka, /orbit, /helm and /savvy all work, and the budget warns the agents at 70% and 100%', async ($, on) => {
+test('/muka works, and the budget warns the agents at 70% and 100%', async ($, on) => {
   engine(on)
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
-  expect((await $.command.run({ command: 'helm', args: 'budget' } as never)).text).toMatch(/Muka budget is \$1\.00 per prompt/)
-  expect((await $.command.run({ command: 'helm', args: 'budget 2' } as never)).text).toMatch(/Muka budget: \$2\.00 per prompt/)
-  expect((await $.command.run({ command: 'orbit', args: 'budget' } as never)).text).toMatch(/Muka budget is \$2\.00 per prompt/)
+  expect((await $.command.run({ command: 'muka', args: 'budget' } as never)).text).toMatch(/Muka budget is \$1\.00 per prompt/)
+  expect((await $.command.run({ command: 'muka', args: 'budget 2' } as never)).text).toMatch(/Muka budget: \$2\.00 per prompt/)
+  expect((await $.command.run({ command: 'muka', args: 'budget' } as never)).text).toMatch(/Muka budget is \$2\.00 per prompt/)
 
   await $.session.measure(cost(10))
   await $.turn.start({ turnId: 't-0', text: 'build the mailer' } as never)
@@ -164,7 +171,7 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   expect(source).toContain('>CONTEXT<')
   // The views are one row of icons, the open one primary; steering lives on the Bridge, so no Steer icon.
   const tabs = (await desk.findAll({ type: 'Button' })).filter(b => String(b.props.key).startsWith('tab-'))
-  expect(tabs).toHaveLength(8)
+  expect(tabs).toHaveLength(6)
   expect(tabs.some(b => b.props.key === 'tab-steer')).toBe(false)
   expect(tabs.filter(b => b.props.variant === 'primary').map(b => b.props.key)).toEqual(['tab-flow'])
   expect(String(tabs[0]!.props.label)).toBe('🧭')
@@ -176,7 +183,7 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   const spendPics = await desk.findAll({ type: 'Svg' })
   expect(spendPics.map(p => String(p.props.alt).split(':')[0])).toEqual([expect.stringMatching(/^Muka/), 'Spend by model', 'This prompt, by agent (est.)'])
   // Every other view is a picture first.
-  const first: Record<string, RegExp> = { 'tab-activity': /^Activity lanes: .*builder 1 steps/, 'tab-notes': /^Since your last prompt: failed 0/, 'tab-radius': /^Files changed · 0/, 'tab-cache': /^Prompt cache/, 'tab-reflect': /^Last turn/ }
+  const first: Record<string, RegExp> = { 'tab-activity': /^Activity lanes: .*builder 1 steps/, 'tab-notes': /^Since your last prompt: failed 0/, 'tab-radius': /^Files changed · 0/, 'tab-reflect': /^Last turn/ }
   for (const [key, alt] of Object.entries(first)) {
     await desk.press({ key })
     const pics = await desk.findAll({ type: 'Svg' })
@@ -205,4 +212,179 @@ test('the pulse under the prompt: the most urgent thing first, else who works, e
   const recap = { at: now, durationMs: 252_000, mainSteps: 9, agents: 2, agentSteps: 20, failed: 0, tokens: 1, filesChanged: 6, notices: 0 }
   expect(pulseLine(idle, [], [], recap, 3, now)).toBe('✓ done in 4m12s · 6 files · $0.69')
   expect(pulseLine(idle, [], [], undefined, 3, now)).toBeUndefined()
+})
+
+const deskStart = async ($: Parameters<Body>[0]) => {
+  await $.session.start({ cwd: 'C:/work', surface: 'desktop', isInteractive: true } as never)
+}
+
+test('the Bridge controls flip each setting with one press, and the buttons redraw', async ($, on) => {
+  engine(on)
+  await deskStart($)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const look = async (key: string) => (await desk.find({ type: 'Button', key }))?.props
+  const status = async () => String((await $.command.run({ command: 'muka', args: '' } as never)).text)
+  // The defaults: everything on except the model guard and the delete guard; the budget is the stored $1.
+  expect((await look('ctl-rules'))?.variant).toBe('primary')
+  expect(String((await look('ctl-rules'))?.label)).toBe('🧠 Rules: on')
+  expect((await look('ctl-models'))?.variant).toBe('secondary')
+  expect((await look('ctl-guard'))?.variant).toBe('secondary')
+  expect(String((await look('ctl-budget'))?.label)).toBe('💲 Budget: $1')
+
+  await desk.press({ key: 'ctl-nudges' })
+  expect((await look('ctl-nudges'))?.variant).toBe('secondary')
+  expect(String((await look('ctl-nudges'))?.label)).toBe('♻️ Nudges: off')
+  expect(await status()).toMatch(/Waste nudges: off/)
+  await desk.press({ key: 'ctl-nudges' })
+  expect((await look('ctl-nudges'))?.variant).toBe('primary')
+  await desk.press({ key: 'ctl-models' })
+  expect((await look('ctl-models'))?.variant).toBe('primary')
+  expect(await status()).toMatch(/Model guard: on/)
+  await desk.press({ key: 'ctl-guard' })
+  expect((await look('ctl-guard'))?.variant).toBe('primary')
+  expect(await status()).toMatch(/Delete guard: on/)
+  await desk.unmount()
+})
+
+test('the Bridge controls: pings, motion and the rules switch off with one press', async ($, on) => {
+  engine(on)
+  await deskStart($)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const look = async (key: string) => (await desk.find({ type: 'Button', key }))?.props
+  const status = async () => String((await $.command.run({ command: 'muka', args: '' } as never)).text)
+  await desk.press({ key: 'ctl-pings' })
+  expect(String((await look('ctl-pings'))?.label)).toBe('🔔 Pings: off')
+  await desk.press({ key: 'ctl-motion' })
+  expect(String((await look('ctl-motion'))?.label)).toBe('✨ Motion: off')
+  await desk.press({ key: 'ctl-rules' })
+  expect(String((await look('ctl-rules'))?.label)).toBe('🧠 Rules: off')
+  const text = await status()
+  expect(text).toMatch(/Pings: off/)
+  expect(text).toMatch(/Motion: off/)
+  expect(text).toMatch(/Smart rules: off/)
+  await desk.unmount()
+})
+
+test('the Bridge budget button cycles $2, $5, $10, off', async ($, on) => {
+  engine(on)
+  await deskStart($)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const look = async (key: string) => (await desk.find({ type: 'Button', key }))?.props
+  const status = async () => String((await $.command.run({ command: 'muka', args: '' } as never)).text)
+  const labels: string[] = []
+  for (let i = 0; i < 5; i++) {
+    await desk.press({ key: 'ctl-budget' })
+    labels.push(String((await look('ctl-budget'))?.label))
+  }
+  expect(labels).toEqual(['💲 Budget: $2', '💲 Budget: $5', '💲 Budget: $10', '💲 Budget: off', '💲 Budget: $2'])
+  expect(await status()).toMatch(/Budget: \$2\.00 per prompt/)
+  await desk.unmount()
+})
+
+test('the Bridge actions send notes to Main and the running helpers, and toast', async ($, on) => {
+  const toasts = engine(on)
+  await deskStart($)
+  await $.turn.start({ turnId: 't-0', text: 'build it' } as never)
+  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder' } as never)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const keys = (await desk.findAll({ type: 'Button' })).map(b => String(b.props.key))
+  expect(new Set(keys).size).toBe(keys.length)
+
+  await desk.press({ key: 'act-stop' })
+  await desk.press({ key: 'act-stop' })
+  expect(toasts.at(-1)).toMatch(/Already waiting for 1 agent/)
+  const sub = (await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-1' } as never)) as { context?: string[] }
+  expect(sub.context).toHaveLength(1)
+  expect(sub.context![0]).toMatch(/Stop now: finish nothing new/)
+  // Main got nothing from Stop helpers.
+  const quiet = (await $.tool.call({ tool: 'Read', file_path: 'C:/work/a.ts' } as never)) as { context?: string[] }
+  expect(quiet.context).toBeUndefined()
+
+  await desk.press({ key: 'act-wrap' })
+  expect(toasts.at(-1)).toMatch(/Note sent to 2 agents/)
+  const main = (await $.tool.call({ tool: 'Read', file_path: 'C:/work/b.ts' } as never)) as { context?: string[] }
+  expect(main.context![0]).toMatch(/Start wrapping up/)
+  const sub2 = (await $.tool.call({ tool: 'Grep', pattern: 'y', agentId: 'agent-1' } as never)) as { context?: string[] }
+  expect(sub2.context![0]).toMatch(/Start wrapping up/)
+
+  await desk.press({ key: 'act-verify' })
+  expect(toasts.at(-1)).toMatch(/Note sent to 1 agent/)
+  const v = (await $.tool.call({ tool: 'Read', file_path: 'C:/work/c.ts' } as never)) as { context?: string[] }
+  expect(v.context![0]).toMatch(/Verify before calling this done: run the tests that cover the change/)
+  const noV = (await $.tool.call({ tool: 'Grep', pattern: 'z', agentId: 'agent-1' } as never)) as { context?: string[] }
+  expect(noV.context).toBeUndefined()
+  await desk.unmount()
+})
+
+test('Stop helpers with no helper running only says so', async ($, on) => {
+  const toasts = engine(on)
+  await deskStart($)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desk.press({ key: 'act-stop' })
+  expect(toasts.at(-1)).toBe('No helpers are running')
+  await desk.unmount()
+})
+
+test('the Report button opens the 7-day report as Markdown, with a way back', async ($, on) => {
+  const toasts = engine(on)
+  await deskStart($)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desk.press({ key: 'act-report' })
+  expect(toasts.at(-1)).toMatch(/Report/)
+  const md = await desk.find({ type: 'Markdown' })
+  expect(String(md?.props.text)).toMatch(/last 7 days/)
+  expect(await desk.find({ type: 'Button', key: 'ctl-rules' })).toBeUndefined()
+  await desk.press({ key: 'report-back' })
+  expect(await desk.find({ type: 'Button', key: 'ctl-rules' })).toBeDefined()
+  expect(await desk.find({ type: 'Markdown' })).toBeUndefined()
+  await desk.unmount()
+})
+
+test('the verified chip: unverified after an edit, verified after a test run, cleared by a new prompt', async ($, on) => {
+  engine(on)
+  await deskStart($)
+  await $.turn.start({ turnId: 't-0', text: 'fix it' } as never)
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const source = async () => String((await desk.find({ type: 'Svg' }))?.props.source)
+  expect(await source()).not.toMatch(/VERIFIED/)
+  // Running tests before any edit changes nothing.
+  await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+  expect(await source()).not.toMatch(/VERIFIED/)
+  await $.tool.call({ tool: 'Edit', file_path: 'C:/work/a.ts', old_string: 'a', new_string: 'b' } as never)
+  expect(await source()).toContain('>⚠ UNVERIFIED<')
+  await $.tool.call({ tool: 'Bash', command: 'git status' } as never)
+  expect(await source()).toContain('>⚠ UNVERIFIED<')
+  await $.tool.call({ tool: 'Bash', command: 'npx vitest run' } as never)
+  const done = await source()
+  expect(done).toContain('>✓ VERIFIED<')
+  expect(done).not.toContain('UNVERIFIED')
+  // A later edit un-verifies it again; a browser tool verifies it.
+  await $.tool.call({ tool: 'Write', file_path: 'C:/work/b.ts', content: 'x' } as never)
+  expect(await source()).toContain('>⚠ UNVERIFIED<')
+  await $.tool.call({ tool: 'mcp__Claude_Browser__computer', action: 'screenshot' } as never)
+  expect(await source()).toContain('>✓ VERIFIED<')
+  await $.turn.start({ turnId: 't-1', text: 'next task' } as never)
+  expect(await source()).not.toMatch(/VERIFIED/)
+  await desk.unmount()
+})
+
+test('verification rules, and the pulse warns when changes are unverified and idle', () => {
+  expect(verifyEffect('Edit', {})).toBe('edit')
+  expect(verifyEffect('NotebookEdit', {})).toBe('edit')
+  expect(verifyEffect('Bash', { command: 'npm run build' })).toBe('check')
+  expect(verifyEffect('PowerShell', { command: 'cargo test -p core' })).toBe('check')
+  expect(verifyEffect('Bash', { command: 'ls -la' })).toBeUndefined()
+  expect(verifyEffect('mcp__Claude_Browser__navigate', {})).toBe('check')
+  expect(verifyEffect('mcp__Claude_Browser__preview_start', {})).toBe('check')
+  expect(nextVerify(undefined, 'check')).toBeUndefined()
+  expect(nextVerify('unverified', 'check')).toBe('verified')
+  expect(nextVerify('verified', 'edit')).toBe('unverified')
+  const idle = { model: 'claude-opus-5-5', isWorking: false, costUsd: 0.69, promptCostStart: 0 }
+  const recap = { at: 0, durationMs: 252_000, mainSteps: 9, agents: 0, agentSteps: 0, failed: 0, tokens: 1, filesChanged: 6, notices: 0 }
+  expect(pulseLine({ ...idle, verify: 'unverified' as const }, [], [], recap, 3, 0)).toBe('⚠ changes not verified yet')
+  expect(pulseLine({ ...idle, verify: 'verified' as const }, [], [], recap, 3, 0)).toBe('✓ done in 4m12s · 6 files · $0.69')
+  expect(verifyChip({})).toBeUndefined()
+  expect(bridgeStrip({ verify: 'verified' }, [], undefined, 0).source).toContain('>✓ VERIFIED<')
+  // Valid XML: no double quote inside an attribute value.
+  expect(bridgeStrip({ verify: 'unverified' }, [], undefined, 0).source).not.toMatch(/="[^"<>]*"[A-Za-z]/)
 })

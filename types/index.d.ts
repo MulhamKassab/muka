@@ -72,6 +72,8 @@ export type MainInfo = {
   promptBudget?: number
   /** How far into the budget the warnings have gone: 0, 70 or 100. */
   budgetStage?: number
+  /** This prompt's verification: 'unverified' after a file edit, 'verified' once tests, a build or a look at the app ran after it. Unset: no edit yet. */
+  verify?: 'unverified' | 'verified'
 }
 
 /** One item of the main agent's task list. */
@@ -178,7 +180,7 @@ export type SteerNote = {
   deliveredAt?: number
 }
 
-export type SavvyView = 'flow' | 'steer' | 'activity' | 'timeline' | 'cost' | 'cache' | 'radius' | 'notes' | 'reflect'
+export type SavvyView = 'flow' | 'steer' | 'activity' | 'cost' | 'radius' | 'notes' | 'reflect' | 'report'
 
 /** The stats recap of the main agent's last finished turn. */
 export type Recap = {

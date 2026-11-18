@@ -25,7 +25,7 @@ const PANE = 'muka'
 const TITLE = 'Muka'
 
 /** The coordination rules Muka adds while smart is on (they used to live in CLAUDE.md). */
-export const MUKA_RULES = "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short.\n\n## Size every task first\n\nBefore starting, decide the size and say it in one line (for example \"Size: M\").\n\n- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.\n- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.\n- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: \"Large tasks\" below.\n- **Careful mode**: only when the user says \"careful mode\", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.\n\n## Large tasks: plan, then swarm\n\n1. **Scout.** One or two `Explore` helpers map the relevant code. Ask for locations and facts, never whole files.\n2. **Plan.** Write `PLAN.md` in the scratchpad with:\n   - a `Budget: $N` line only if the user gave a budget for this task (none by default),\n   - the phases, one short line each (they become the progress bar),\n   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,\n   - the shared interfaces between pieces, fixed before anyone builds.\n   Consult the advisor once, on this plan.\n3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see \"Sub-masters\"), at any depth.\n4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.\n5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.\n6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.\n\nKeep the team small: one or two builders is usual; more only when the pieces are truly separate.\n\n## Helpers\n\n- **Model and effort:** set both for every helper you start (the Agent tool's `model` and `effort`; this rule is the user's explicit instruction to set them). Any model is allowed (`haiku`, `sonnet`, `opus`, `fable`) at any effort (`low` to `max`): choose what gives the best result for the piece at a sensible cost. A guide, not a limit:\n  - searching, reading, listing, simple lookups: `haiku`, `low`;\n  - routine code, tests, docs, reviews: `sonnet`, `medium`;\n  - tricky bugs, changes across many files, risky migrations: `sonnet` or `opus`, `high`;\n  - hard reasoning the whole result depends on (architecture, security, a stubborn failure): `opus` or `fable`, `high` or `max`.\n  Pay for strength where it changes the result; don't spend it on work a cheaper model does just as well.\n- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.\n- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.\n- **Stop rules (at every level):**\n  - the same error twice: change the approach (the main session may consult the advisor once);\n  - a helper on one step for 5+ minutes: steer it or replace it;\n  - if the user set a budget: at 70% start wrapping up; at 100% start no new helpers, finish the piece in hand, and report what is left.\n- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.\n\n## Sub-masters\n\nEvery helper is a sub-master: it may run its piece the way the master runs the task (size it, plan it in a few lines, start its own helpers, fit and test their work, report up), and its helpers may do the same, at any depth. Each level follows these same rules, including picking any model and effort for its own helpers. To keep usage sensible:\n\n- **Split only when it pays:** an M or L piece with parts that have their own files. Do an S piece yourself.\n- **Keep each team small:** start the helpers the work needs, not more.\n- **Reports stay at 150 words at every level,** so nothing large flows back up. Helpers never ask the user; they report the question up.\n\nThe user sees every agent and sub-agent live in Muka's panel.\n\n## Questions\n\nWhen you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait."
+export const MUKA_RULES = "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short.\n\n## Size every task first\n\nBefore starting, decide the size and say it in one line (for example \"Size: M\").\n\n- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.\n- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.\n- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: \"Large tasks\" below.\n- **Careful mode**: only when the user says \"careful mode\", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.\n\n## Large tasks: plan, then swarm\n\n1. **Scout.** One or two `Explore` helpers map the relevant code. Ask for locations and facts, never whole files.\n2. **Plan.** Write `PLAN.md` in the scratchpad with:\n   - a `Budget: $N` line only if the user gave a budget for this task (none by default),\n   - the phases, one short line each (they become the progress bar),\n   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,\n   - the shared interfaces between pieces, fixed before anyone builds.\n   Consult the advisor once, on this plan.\n3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see \"Sub-masters\"), at any depth.\n4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.\n5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.\n6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.\n\nKeep the team small: one or two builders is usual; more only when the pieces are truly separate.\n\n## Helpers\n\n- **Model and effort:** set both for every helper you start (the Agent tool's `model` and `effort`; this rule is the user's explicit instruction to set them). Any model is allowed (`haiku`, `sonnet`, `opus`, `fable`) at any effort (`low` to `max`): choose what gives the best result for the piece at a sensible cost. A guide, not a limit:\n  - searching, reading, listing, simple lookups: `haiku`, `low`;\n  - routine code, tests, docs, reviews: `sonnet`, `medium`;\n  - tricky bugs, changes across many files, risky migrations: `sonnet` or `opus`, `high`;\n  - hard reasoning the whole result depends on (architecture, security, a stubborn failure): `opus` or `fable`, `high` or `max`.\n  Pay for strength where it changes the result; don't spend it on work a cheaper model does just as well.\n- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.\n- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.\n- **Stop rules (at every level):**\n  - the same error twice: change the approach (the main session may consult the advisor once);\n  - a helper on one step for 5+ minutes: steer it or replace it;\n  - if the user set a budget: at 70% start wrapping up; at 100% start no new helpers, finish the piece in hand, and report what is left.\n- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.\n\n## Sub-masters\n\nEvery helper is a sub-master: it may run its piece the way the master runs the task (size it, plan it in a few lines, start its own helpers, fit and test their work, report up), and its helpers may do the same, at any depth. Each level follows these same rules, including picking any model and effort for its own helpers. To keep usage sensible:\n\n- **Split only when it pays:** an M or L piece with parts that have their own files. Do an S piece yourself.\n- **Keep each team small:** start the helpers the work needs, not more.\n- **Reports stay at 150 words at every level,** so nothing large flows back up. Helpers never ask the user; they report the question up.\n\nThe user sees every agent and sub-agent live in Muka's panel.\n\n## Verify before done\n\nNever call work done on reading alone; prove it ran.\n\n- **Run the real thing:** after the last edit, run what proves the change: the tests that cover it, the build, the linter, and for anything a person sees, the app itself (open it, click through the change, take a screenshot). End-to-end checks beat unit tests; add one when a change crosses parts.\n- **Keep the judge independent:** never edit a test, a check or its data to make it pass. A failing check is fixed in the code, or reported.\n- **No flaky green:** a flaky test is fixed or removed, never retried or skipped until it passes.\n- **Hunt your own blind spots:** for logic with many inputs, add a property test (fast-check, Hypothesis, proptest); when replacing old code, compare its output with the old version's.\n- **One reviewer, tagged findings:** on an L task the `reviewer` tags each finding **Important**, **Nit** or **Pre-existing**; fix the Important ones. If the project has a REVIEW.md, the reviewer follows it.\n- **Turn each miss into a rule:** when something slipped through, say in one line what check would have caught it, so it can be added to the project's CLAUDE.md.\n- **Say how you verified it** in the final message: what ran, and what was not checked.\n\n## Questions\n\nWhen you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait."
 
 // Smart: the rules are on in every chat unless /muka smart off turned them off.
 let isSmart = true
@@ -1352,70 +1352,6 @@ export const statusText = (info: MainInfo): string => {
 }
 
 // ---------------------------------------------------------------------------
-// Timeline: when each agent ran, side by side.
-
-export type Span = { label: string; depth: number; from: number; to: number; status: SubAgentStatus | 'main' }
-
-/** The main agent's span and each subagent's, in tree order; empty before any prompt. */
-export const timelineSpans = (info: MainInfo, list: SubAgent[], now = Date.now()): Span[] => {
-  const spans: Span[] = []
-  if (info.turnStartedAt !== undefined) {
-    spans.push({ label: `Main · ${shortModel(info.model)}`, depth: 0, from: info.turnStartedAt, to: info.isWorking ? now : (info.turnEndedAt ?? now), status: 'main' })
-  }
-  for (const r of treeRows(list)) {
-    const a = r.agent
-    spans.push({ label: `${a.type} · ${a.model}`, depth: r.depth + 1, from: a.startedAt, to: a.endedAt ?? now, status: a.status })
-  }
-  return spans
-}
-
-/** One text row per span: label, a bar placed on the shared time axis, and its length. */
-export const timelineText = (spans: Span[], width = 24): string[] => {
-  if (spans.length === 0) return []
-  const t0 = Math.min(...spans.map(s => s.from))
-  const t1 = Math.max(...spans.map(s => s.to), t0 + 1)
-  const scale = (t: number) => Math.round(((t - t0) / (t1 - t0)) * width)
-  return spans.map(s => {
-    const a = Math.min(width - 1, scale(s.from))
-    const b = Math.max(a + 1, scale(s.to))
-    const track = '·'.repeat(a) + '█'.repeat(b - a) + '·'.repeat(Math.max(0, width - b))
-    const label = clip(`${'  '.repeat(s.depth)}${s.label}`, 22).padEnd(22)
-    return `${label} ${track} ${duration(s.to - s.from)}`
-  })
-}
-
-export const timelineChart = (spans: Span[]): { source: string; alt: string } => {
-  const W = 340
-  const LABEL_W = 116
-  const ROW = 20
-  const top = 18
-  const t0 = spans.length ? Math.min(...spans.map(s => s.from)) : 0
-  const t1 = spans.length ? Math.max(...spans.map(s => s.to), t0 + 1) : 1
-  const track = W - LABEL_W - 12
-  const x = (t: number) => LABEL_W + ((t - t0) / (t1 - t0)) * track
-  const h = top + Math.max(1, spans.length) * ROW + 8
-  const parts: string[] = []
-  parts.push(`<text x="${LABEL_W}" y="12" class="s">0s</text><text x="${W - 8}" y="12" class="s" text-anchor="end">${xml(duration(t1 - t0))}</text>`)
-  spans.forEach((s, i) => {
-    const y = top + i * ROW
-    const hue = s.status === 'main' ? HUE.main : (HUE[s.status] ?? HUE.running)
-    const x1 = x(s.from)
-    const x2 = Math.max(x1 + 3, x(s.to))
-    parts.push(`<text x="${4 + s.depth * 8}" y="${y + 13}" class="s">${xml(clip(clean(s.label), 18 - s.depth))}</text>`)
-    parts.push(`<rect x="${LABEL_W}" y="${y + 4}" width="${track}" height="12" rx="3" fill="#888780" fill-opacity="0.08"/>`)
-    parts.push(`<rect x="${x1.toFixed(1)}" y="${y + 4}" width="${(x2 - x1).toFixed(1)}" height="12" rx="3" fill="${hue}" fill-opacity="0.55" stroke="${hue}" stroke-width="1"/>`)
-  })
-  if (spans.length === 0) parts.push(`<text x="4" y="${top + 13}" class="s">Nothing has run since your last prompt</text>`)
-  const source =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}">` +
-    `<style>${THEME_CSS}</style>` +
-    parts.join('') +
-    `</svg>`
-  const alt = clip(clean(`Timeline. ${spans.map(s => `${s.label} ran ${duration(s.to - s.from)}`).join('; ') || 'Nothing has run yet.'}`), 2000)
-  return { source, alt }
-}
-
-// ---------------------------------------------------------------------------
 // File diffs: what an Edit or Write changed, as hunks the diff view draws.
 
 const DIFF_LINES = 60
@@ -1931,6 +1867,10 @@ const stripAlt = (info: MainInfo, list: SubAgent[], budget: number | undefined, 
   )
 }
 
+/** The verified chip: green once checked, amber while a change is unchecked, none before any change. */
+export const verifyChip = (info: MainInfo): { text: string; hue: string } | undefined =>
+  info.verify === 'verified' ? { text: '✓ VERIFIED', hue: H.green } : info.verify === 'unverified' ? { text: '⚠ UNVERIFIED', hue: H.amber } : undefined
+
 /** The head of every Helm card: brand, clock and budget, the now line, the phase bar, where the plan stands. */
 const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined, now: number): { parts: string; height: number; isStuck: boolean } => {
   const W = HELM_W
@@ -1955,8 +1895,18 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
       `${live ? `<circle class="ping" cx="10" cy="9" r="3.5" fill="none" stroke="${badgeHue}"/>` : ''}` +
       `<text x="18" y="13" class="chip" style="fill:${badgeHue}">${nl.isStuck ? 'STUCK' : live ? 'LIVE' : 'IDLE'}</text></g>`,
   )
+  // Next to it, whether the last file change has been tested, built or looked at.
+  const vs = verifyChip(info)
+  if (vs) {
+    const vx = 106 + (live ? 50 : 46) + 6
+    const vw = vs.text.length * 6 + 12
+    parts.push(
+      `<g transform="translate(${vx} ${y - 13})"><rect width="${vw}" height="18" rx="9" fill="${vs.hue}" fill-opacity=".12" stroke="${vs.hue}" stroke-opacity=".4"/>` +
+        `<text x="6" y="13" class="chip" style="font-size:10px;fill:${vs.hue}">${xml(vs.text)}</text></g>`,
+    )
+  }
   const clockText = info.turnStartedAt !== undefined ? `T+ ${mmss((info.isWorking ? now : (info.turnEndedAt ?? now)) - info.turnStartedAt)}` : 'T+ --:--'
-  const moneyText = b ? `${usd(b.spent)} / ${usd(b.budget)}` : info.costUsd !== undefined ? usd(info.costUsd) : ''
+  const moneyText = b ? `${usd(b.spent)}${vs ? '/' : ' / '}${usd(b.budget)}` : info.costUsd !== undefined ? usd(info.costUsd) : ''
   const moneyHue = b && b.pct >= 1 ? H.red : b && b.pct >= 0.7 ? H.amber : H.mute
   parts.push(`<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="fill:${moneyHue}">${xml(`${clockText}${moneyText ? ` · ${moneyText}` : ''}`)}</text>`)
   if (b) {
@@ -2426,7 +2376,7 @@ export const spendBar = (spend: Record<string, number> | undefined, budget: numb
   return { source: card(W, 80, parts.join('')), alt: clip(`Spend by model: ${legend.join(', ') || 'nothing yet'}${budget ? `; budget ${usd(budget)}` : ''}.`, 400) }
 }
 
-/** The views, each as one icon in the tab row; the label names it for a screen reader. */
+/** The views, each as one icon in the tab row; the label names it for a screen reader. 'report' is opened from the Bridge's Actions, not from this row. */
 export const VIEW_ICONS: { view: SavvyView; icon: string; label: string }[] = [
   { view: 'flow', icon: '🧭', label: 'Bridge' },
   { view: 'activity', icon: '📜', label: 'Activity' },
@@ -2434,8 +2384,6 @@ export const VIEW_ICONS: { view: SavvyView; icon: string; label: string }[] = [
   { view: 'notes', icon: '⚠️', label: 'Alerts' },
   { view: 'radius', icon: '📝', label: 'Changes' },
   { view: 'cost', icon: '💲', label: 'Spend' },
-  { view: 'timeline', icon: '⏱️', label: 'Timeline' },
-  { view: 'cache', icon: '🧊', label: 'Cache' },
   { view: 'reflect', icon: '💡', label: 'Reflect' },
 ]
 
@@ -2547,26 +2495,6 @@ export const lanesCard = (feed: ActivityItem[], list: SubAgent[], now = Date.now
   return { source: card(W, Hh, parts.join('')), alt: clip(alt, 1000) }
 }
 
-/** The cache at a glance: one big ring for all agents, its read, written and fresh tokens. */
-export const cacheRing = (all: Usage | undefined): Card => {
-  const W = HELM_W
-  const rate = cacheRate(all)
-  const parts: string[] = [ringGauge(80, 70, 42, rate, 'ALL AGENTS', H.violet)]
-  const rows: [string, number, string][] = [
-    ['read from cache', all?.cacheRead ?? 0, H.violet],
-    ['written to cache', all?.cacheWrite ?? 0, H.amber],
-    ['sent fresh', all?.input ?? 0, H.faint],
-  ]
-  rows.forEach(([label, n, hue], i) => {
-    const y = 46 + i * 26
-    parts.push(`<rect x="160" y="${y - 10}" width="12" height="12" rx="3" fill="${hue}"/>`)
-    parts.push(`<text x="180" y="${y}" class="hs">${xml(label)}</text>`)
-    parts.push(`<text x="${W - 20}" y="${y}" class="hn" text-anchor="end" style="font-size:14px">${xml(kTokens(n))}</text>`)
-  })
-  const alt = `Prompt cache: ${rate === undefined ? 'no reading yet' : `${rate}% of input read from cache`}; ${kTokens(all?.cacheRead ?? 0)} read, ${kTokens(all?.cacheWrite ?? 0)} written, ${kTokens(all?.input ?? 0)} fresh.`
-  return { source: card(W, 148, parts.join('')), alt }
-}
-
 /** A tile set for a finished turn: time, steps, helpers, tokens, cache, files. */
 export const recapTiles = (rc: Recap | undefined): Card =>
   tilesCard(
@@ -2622,6 +2550,7 @@ export const pulseLine = (info: MainInfo, list: SubAgent[], notes: Notice[], rec
     const ctx = info.ctxPercent !== undefined ? `ctx ${info.ctxPercent}%` : ''
     return [who, money, ctx].filter(Boolean).join('   ')
   }
+  if (info.verify === 'unverified') return '⚠ changes not verified yet'
   if (recap) return [`✓ done in ${duration(recap.durationMs)}`, recap.filesChanged > 0 ? plural(recap.filesChanged, 'file') : '', b ? usd(b.spent) : ''].filter(Boolean).join(' · ')
   return undefined
 }
@@ -3012,6 +2941,40 @@ const sendSteer = async ($: EngineInterface, text: string): Promise<void> => {
   await Promise.resolve($.ui.toast(isRepeat ? `Already waiting for ${toLabel}` : `🎯 Sent to ${toLabel}: it reads it at its next step`)).catch(() => undefined)
 }
 
+/** The dollar steps the Bridge's Budget button cycles through, then off. */
+const BUDGET_STEPS = [2, 5, 10]
+
+/** The text of the Bridge's Actions row. */
+export const STOP_HELPERS_NOTE = 'Stop now: finish nothing new, and report what you have and what is left.'
+export const VERIFY_NOTE =
+  'Verify before calling this done: run the tests that cover the change, the build and the linter, and for anything visible run the app and check it; then say what ran and what was not checked.'
+
+/**
+ * One note to Main (when `main`) and to every running helper (when `helpers`),
+ * as sendSteer queues one; a toast says who got it.
+ */
+const sendToMany = async ($: EngineInterface, text: string, who: { main: boolean; helpers: boolean }): Promise<void> => {
+  const list = await read($, agents)
+  const targets = [
+    ...(who.main ? [{ to: 'main', toLabel: 'Main' }] : []),
+    ...(who.helpers ? list.filter(a => a.status === 'running').map(a => ({ to: a.id, toLabel: a.type })) : []),
+  ]
+  const noteText = clip(clean(text), 1000)
+  const waiting = await read($, steer)
+  // A target that already has this same note unread is left alone: a repeat press.
+  const fresh = targets.filter(t => !waiting.some(n => n.deliveredAt === undefined && n.to === t.to && n.text === noteText))
+  const at = Date.now()
+  const notes: SteerNote[] = fresh.map(t => ({ id: `steer-${at}-${++noticeSeq}`, text: noteText, to: t.to, toLabel: t.toLabel, at }))
+  if (notes.length > 0) await update($, steer, l => [...l, ...notes].slice(-20))
+  const msg =
+    targets.length === 0
+      ? 'No helpers are running'
+      : notes.length === 0
+        ? `Already waiting for ${plural(targets.length, 'agent')}`
+        : `🎯 Note sent to ${plural(notes.length, 'agent')}: read at the next step`
+  await Promise.resolve($.ui.toast(msg)).catch(() => undefined)
+}
+
 // ---------------------------------------------------------------------------
 // Waste catchers: Muka watches for the usual token waste and tells the agent
 // at once, on the very result that showed it, so the next step is cheaper.
@@ -3036,6 +2999,25 @@ export const newWasteState = (): WasteState => ({ reads: new Map(), writes: new 
 
 const wasteState: WasteState = newWasteState()
 let nudgesOn = true
+
+/** A shell command that tests, builds or lints. */
+const CHECK_COMMAND = /\b(test|tests|vitest|jest|pytest|cargo test|go test|npm run (test|build|lint|check|typecheck)|pnpm|yarn (test|build|lint)|tsc|eslint|build|lint|playwright|cypress)\b/i
+
+/**
+ * What a finished, successful tool call does to the prompt's verification:
+ * 'edit' for a file change, 'check' for a test, build, lint or a look at the
+ * running app, undefined for anything else.
+ */
+export const verifyEffect = (tool: string, args: Record<string, unknown>): 'edit' | 'check' | undefined => {
+  if (tool === 'Edit' || tool === 'Write' || tool === 'NotebookEdit') return 'edit'
+  if ((tool === 'Bash' || tool === 'PowerShell') && typeof args.command === 'string' && CHECK_COMMAND.test(args.command)) return 'check'
+  if (/browser|screenshot|preview/i.test(tool)) return 'check'
+  return undefined
+}
+
+/** The verification state after one more call: an edit makes it 'unverified'; a check verifies only an unverified one. */
+export const nextVerify = (state: MainInfo['verify'], effect: 'edit' | 'check' | undefined): MainInfo['verify'] =>
+  effect === 'edit' ? 'unverified' : effect === 'check' && state === 'unverified' ? 'verified' : state
 
 /** This prompt's efficiency counts, for the log: waste caught, helpers moved, the size Claude gave it. */
 const promptStats: { wasteCount: number; wasteTokens: number; guarded: number; size?: 'S' | 'M' | 'L' } = { wasteCount: 0, wasteTokens: 0, guarded: 0 }
@@ -3441,7 +3423,7 @@ const undoSetup = async ($: EngineInterface): Promise<{ text: string }> => {
   }
 }
 
-/** /muka, and its old names /orbit, /helm and /savvy: all run the same commands. */
+/** /muka: status, switches, budget, report, setup. */
 const runCommand = async ($: EngineInterface, args: string): Promise<{ text: string }> => {
   const words = args.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (words[0] === 'budget') {
@@ -3573,18 +3555,6 @@ const checkBudget = async ($: EngineInterface): Promise<void> => {
   await addNotice($, 'cost', 'Muka', `Budget ${next}%: ${usd(b.spent)} of ${usd(b.budget)}. Told ${plural(targets.length, 'agent')} to ${next === 100 ? 'stop starting helpers and report' : 'start wrapping up'}.`)
 }
 
-const TABS: { view: SavvyView; label: string }[] = [
-  { view: 'flow', label: 'Bridge' },
-  { view: 'steer', label: 'Steer' },
-  { view: 'activity', label: 'Activity' },
-  { view: 'timeline', label: 'Timeline' },
-  { view: 'cost', label: 'Cost' },
-  { view: 'cache', label: 'Cache' },
-  { view: 'radius', label: 'Changes' },
-  { view: 'notes', label: 'Alerts' },
-  { view: 'reflect', label: 'Reflect' },
-]
-
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -3593,9 +3563,6 @@ export const register: Register = on => {
       name: 'muka',
       description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday]',
     })
-    await $.command.register({ name: 'orbit', description: 'Muka (an old name): same as /muka' })
-    await $.command.register({ name: 'helm', description: 'Muka (an old name): same as /muka' })
-    await $.command.register({ name: 'savvy', description: 'Muka (its first name): same as /muka' })
     // On in every chat unless /savvy off turned it off; the delete guard is off
     // (it never asks) unless /savvy guard on turned it on.
     isOn = (await $.store.get('enabled')) !== false
@@ -3625,9 +3592,6 @@ export const register: Register = on => {
     return started
   })
 
-  on('command.run', { command: 'savvy' }, ($, e) => runCommand($, e.args))
-  on('command.run', { command: 'helm' }, ($, e) => runCommand($, e.args))
-  on('command.run', { command: 'orbit' }, ($, e) => runCommand($, e.args))
   on('command.run', { command: 'muka' }, ($, e) => runCommand($, e.args))
 
   // Smart: the rules join each new conversation's context, as CLAUDE.md does.
@@ -3777,6 +3741,16 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         await addNotice($, 'error', who, `${label} failed`)
       } else {
         const path = str(args.file_path) ?? str(args.notebook_path)
+        // Did this prompt's last file change get tested, built or looked at?
+        const effect = verifyEffect(e.tool, args)
+        if (effect) {
+          const before = (await read($, main)).verify
+          const after = nextVerify(before, effect)
+          if (after !== before) {
+            await update($, main, m => ({ ...m, verify: after }))
+            await refreshStatus($)
+          }
+        }
         if (path && (e.tool === 'Edit' || e.tool === 'Write' || e.tool === 'NotebookEdit')) {
           await recordChange($, path, who, e.tool, args)
           if (isOutside(path, projectRoot)) await addNotice($, 'outside', who, `${e.tool} ${path} is outside the project folder`)
@@ -3866,7 +3840,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       await update($, focus, () => '')
       Object.assign(promptStats, { wasteCount: 0, wasteTokens: 0, guarded: 0, size: undefined })
       const prompt = clip(clean(e.text), 120)
-      await update($, main, m => ({ ...m, current: undefined, isWorking: true, stepCount: 0, turnStartedAt: Date.now(), turnEndedAt: undefined, prompt, promptCostStart: m.costUsd ?? 0, promptBudget: undefined, budgetStage: 0 }))
+      await update($, main, m => ({ ...m, current: undefined, isWorking: true, stepCount: 0, turnStartedAt: Date.now(), turnEndedAt: undefined, prompt, promptCostStart: m.costUsd ?? 0, promptBudget: undefined, budgetStage: 0, verify: undefined }))
     } else {
       await update($, main, m => ({ ...m, isWorking: true }))
     }
@@ -4057,7 +4031,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         ))}
       </Box>
     )
-    const viewName = <Text bold>{VIEW_ICONS.find(t => t.view === current)?.label ?? ''}</Text>
+    const viewName = <Text bold>{VIEW_ICONS.find(t => t.view === current)?.label ?? (current === 'report' ? 'Report' : '')}</Text>
 
     // The desktop app: the icon row on top, then the Helm card, then the view.
     const isDesk = e.surface === 'desktop'
@@ -4159,22 +4133,12 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       ])
     }
 
-    if (current === 'timeline') {
-      const spans = timelineSpans(info, list)
-      if (e.surface === 'desktop') {
-        const { Svg } = $.ui.resolve(e)
-        const chart = timelineChart(spans)
-        const spend = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
-        return page([<Text bold>Mission: who ran when</Text>, <Svg source={chart.source} alt={chart.alt} />, <Text bold>Spend by model this session</Text>, <Svg source={spend.source} alt={spend.alt} />])
-      }
-      const lines = timelineText(spans)
-      const room = Math.max(2, rows - 13)
+    if (current === 'report') {
+      // The last 7 days of the prompt log, as the /muka report prints it.
+      const text = efficiencyReport(await readLogDays($, 7).catch(() => [] as LogEntry[]), 7)
       return page([
-        <Text bold>Timeline of this prompt</Text>,
-        ...(lines.length === 0
-          ? [<Text dimColor>Nothing has run since your last prompt.</Text>]
-          : lines.slice(0, room).map((l, i) => <Text color={spans[i]?.status === 'running' ? 'cyan' : undefined}>{l}</Text>)),
-        lines.length > room ? <Text dimColor>… and {lines.length - room} more</Text> : <Text> </Text>,
+        <Button key="report-back" label="← Bridge" onPress={() => update($, view, () => 'flow')} />,
+        <Markdown text={text} />,
       ])
     }
 
@@ -4225,34 +4189,6 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         ) : (
           <Text color="yellow">The estimates come to {usd(-rest)} more than the exact total: the price table may be out of date.</Text>
         ),
-      ])
-    }
-
-    if (current === 'cache') {
-      const line = (name: string, u: Usage | undefined, note = '') => {
-        const rate = cacheRate(u)
-        return (
-          <Text>
-            {clip(name, 22).padEnd(22)} <Text color="magenta">{bar(rate ?? 0, 100)}</Text>{' '}
-            {rate === undefined ? 'no reading yet' : `${rate}% · ${kTokens(u!.cacheRead)} read · ${kTokens(u!.cacheWrite)} written · ${kTokens(u!.input)} fresh${note}`}
-          </Text>
-        )
-      }
-      const all = list.reduce<Usage | undefined>((s, a) => addUsage(s, a.usage), info.usage)
-      if (isDesk) {
-        const rateText = (u: Usage | undefined) => (cacheRate(u) === undefined ? '–' : `${cacheRate(u)}%`)
-        const rateRows: BarRow[] = [
-          { label: `${agentIcon('main')} Main`, value: cacheRate(info.usage) ?? 0, text: rateText(info.usage), hue: HELM_HUE.violet },
-          ...treeRows(list).map(r => ({ label: `${agentIcon(r.agent.type)} ${r.agent.type}`, value: cacheRate(r.agent.usage) ?? 0, text: rateText(r.agent.usage), hue: HELM_HUE.violet })),
-        ]
-        return page([pic(cacheRing(all)), pic(barsCard('Read from cache, by agent', rateRows, 100))])
-      }
-      return page([
-        <Text bold>Prompt cache: share of input read from cache</Text>,
-        line(`Main · ${shortModel(info.model)}`, info.usage, ' (last turn)'),
-        ...treeRows(list).map(r => line(`${'  '.repeat(r.depth)}${r.agent.type} · ${r.agent.model}`, r.agent.usage)),
-        line('All agents', all),
-        <Text dimColor>Read from cache costs about a tenth of fresh input; written costs a little more than fresh.</Text>,
       ])
     }
 
@@ -4532,12 +4468,43 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       const { Svg } = $.ui.resolve(e)
       // The Bridge as one card, then a button per agent.
       const bridge = bridgeCard(info, list, await read($, activity), defaultBudget)
-      return page([
-        <Svg source={bridge.source} alt={bridge.alt} />,
-        openers,
-        // The pause control for the moving pictures (hover any dot, gauge or bar for its details).
-        <Button key="motion-toggle" label={motionOn ? '⏸ Pause animations' : '▶ Play animations'} dimColor onPress={() => setMotion($, !motionOn)} />,
-      ])
+      // A toggle: on is the primary button; each press runs the /muka command and redraws.
+      const toggle = (key: string, label: string, isOnNow: boolean, run: () => Promise<unknown>) => (
+        <Button key={key} label={`${label}: ${isOnNow ? 'on' : 'off'}`} variant={isOnNow ? 'primary' : 'secondary'} onPress={async () => { await run(); await update($, tick, n => n + 1) }} />
+      )
+      const cmd = (words: string) => () => runCommand($, words)
+      const nextBudget = defaultBudget === undefined ? BUDGET_STEPS[0] : BUDGET_STEPS.find(s => s > defaultBudget!)
+      const controls = (
+        <Box key="controls" flexDirection="column" gap={1}>
+          <Text bold>Controls</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {toggle('ctl-rules', '🧠 Rules', isSmart, () => setSmart($, !isSmart))}
+            {toggle('ctl-nudges', '♻️ Nudges', nudgesOn, cmd(`nudges ${nudgesOn ? 'off' : 'on'}`))}
+            {toggle('ctl-models', '🛡 Model guard', modelGuardOn, cmd(`models ${modelGuardOn ? 'off' : 'on'}`))}
+            {toggle('ctl-guard', '🗑 Delete guard', isGuardOn, cmd(`guard ${isGuardOn ? 'off' : 'on'}`))}
+            {toggle('ctl-pings', '🔔 Pings', pingsOn, cmd(`ping ${pingsOn ? 'off' : 'on'}`))}
+            {toggle('ctl-motion', '✨ Motion', motionOn, () => setMotion($, !motionOn))}
+            <Button
+              key="ctl-budget"
+              label={`💲 Budget: ${defaultBudget === undefined ? 'off' : `$${defaultBudget}`}`}
+              variant={defaultBudget === undefined ? 'secondary' : 'primary'}
+              onPress={async () => { await runCommand($, `budget ${nextBudget ?? 'off'}`); await update($, tick, n => n + 1) }}
+            />
+          </Box>
+        </Box>
+      )
+      const actions = (
+        <Box key="actions" flexDirection="column" gap={1}>
+          <Text bold>Actions</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            <Button key="act-wrap" label="⏸ Wrap up all" onPress={() => sendToMany($, STEER_PRESETS.find(p => p.key === 'wrap')!.text, { main: true, helpers: true })} />
+            <Button key="act-stop" label="⏹ Stop helpers" onPress={() => sendToMany($, STOP_HELPERS_NOTE, { main: false, helpers: true })} />
+            <Button key="act-verify" label="✅ Verify" onPress={() => sendToMany($, VERIFY_NOTE, { main: true, helpers: false })} />
+            <Button key="act-report" label="📊 Report" onPress={async () => { await update($, view, () => 'report'); await Promise.resolve($.ui.toast('📊 Report: the last 7 days')).catch(() => undefined) }} />
+          </Box>
+        </Box>
+      )
+      return page([<Svg source={bridge.source} alt={bridge.alt} />, openers, controls, actions])
     }
 
     // Elsewhere, the same flow as a text tree. An agent's row and its step

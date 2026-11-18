@@ -6,7 +6,7 @@ Muka helps Claude Code work as a well-run team, and shows you what that team is 
 - **Smart rules:** coordination rules you switch on and off (task sizes, plan then swarm, helper models, stop rules, question rules).
 - **Setup:** one command installs the helper agents, the status line and the settings.
 
-It was first called Savvy, then Helm, then Orbit; those commands still work.
+It was first called Savvy, then Helm, then Orbit; those old command names are gone, so use `/muka`.
 
 ## Install with one prompt
 
@@ -46,14 +46,12 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka budget 5` / `/muka budget off` | A spending cap per prompt (none by default) |
 | `/muka guard on` / `/muka guard off` | Ask before shell commands delete files (off by default) |
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
-| `/muka motion on` / `/muka motion off` | The panel's animations (on by default; also ⏸ on the Bridge) |
+| `/muka motion on` / `/muka motion off` | The panel's animations (on by default; also ✨ Motion on the Bridge) |
 | `/muka recap` / `/muka recap yesterday` | The day's finished prompts |
 | `/muka report` / `/muka report 14` | Efficiency over the last 7 (or up to 14) days, with suggestions |
 | `/muka nudges on` / `/muka nudges off` | Tell the agent about waste as it happens (on by default) |
 | `/muka models on` / `/muka models off` | Stop clear model waste for helpers (off by default) |
 | `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
-
-`/orbit`, `/helm` and `/savvy` are old names for `/muka`.
 
 ## Smart rules
 
@@ -95,23 +93,24 @@ Everything it replaces is copied first to `~/.claude/backups/muka-setup-<time>/`
 
 ## The panel (desktop app)
 
-A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 Changes, 💲 Spend, ⏱️ Timeline, 🧊 Cache and 💡 Reflect. Every view is a picture first, on Claude's own light background.
+A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 Changes, 💲 Spend and 💡 Reflect. Every view is a picture first, on Claude's own light background.
 
 - **🧭 Bridge**, one card:
   - MUKA with the clock and spend, what is happening now, the phase bar and where the plan stands.
   - The Orbit: Main in the centre and every helper and sub-helper around it as a tree, each with its model, time, and what it is doing right now (▸) or its steps and cost when done. A helper that started its own wears a violet ring. Past 6 helpers, every bubble shows a number, and a legend under the Orbit lists them all in tree order (sub-helpers indented) with model, cost and what each is doing.
   - Gauges for the usage limit, context and cache, and the latest steps.
 
-  Under the card, a button per agent opens its details, with Steer and Stop.
+  Under the card, a button per agent opens its details, with Steer and Stop. Then two rows of buttons:
+  - **Controls**, toggles that are highlighted while on, each doing what its `/muka` command does: 🧠 Rules (smart), ♻️ Nudges, 🛡 Model guard, 🗑 Delete guard, 🔔 Pings, ✨ Motion, and 💲 Budget, which cycles off, $2, $5, $10, off.
+  - **Actions**, each with a toast: ⏸ Wrap up all (a wrap-up note to Main and every running helper), ⏹ Stop helpers (a stop-and-report note to every running helper), ✅ Verify (asks Main to run the tests, build and linter, and look at anything visible), and 📊 Report (the last 7 days, as `/muka report` prints it, with a button back to the Bridge).
+  - **Verified badge:** next to LIVE/IDLE, a green ✓ VERIFIED chip shows once tests, a build, the linter or a look at the running app followed your last file change, and an amber ⚠ UNVERIFIED chip shows while a change has not been checked. It resets with each new prompt. While idle with unverified changes, the pulse reads "⚠ changes not verified yet".
 - **📜 Activity:** a lane per agent with a dot per step (failures in red) and the latest steps.
 - **⚠️ Alerts:** tiles for failed, denied, risky, outside the project, stuck and warnings, and the latest events.
 - **📝 Changes:** a bar per changed file (red outside the project), ± to see its diff, and deletes.
 - **💲 Spend:** spend by model against the budget, and per agent (at API prices).
-- **⏱️ Timeline:** when each agent ran.
-- **🧊 Cache:** a ring for all agents and a bar per agent.
 - **💡 Reflect:** the last turn as tiles, and an AI review on demand.
 
-The pictures move: the Orbit's rings turn, working helpers pulse and ping, links to them flow, Main breathes with a comet circling it while it works, sparks travel to working helpers, and progress bars shimmer. The motion carries on smoothly when the numbers update. ⏸ Pause animations under the Bridge (or `/muka motion off`) stops them, and a system "reduce motion" setting always keeps them still.
+The pictures move: the Orbit's rings turn, working helpers pulse and ping, links to them flow, Main breathes with a comet circling it while it works, sparks travel to working helpers, and progress bars shimmer. The motion carries on smoothly when the numbers update. The ✨ Motion toggle on the Bridge (or `/muka motion off`) stops them, and a system "reduce motion" setting always keeps them still.
 
 In the terminal and editors the same views are text.
 

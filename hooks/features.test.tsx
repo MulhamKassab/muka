@@ -160,7 +160,7 @@ const engine = (on: On, o: Opts = {}) => {
   mock.env(on, o.env ?? {})
   const clock = mock.clock(on)
   on('session.surfaces', () => ({ value: o.surfaces ?? [] }) as never)
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', () => ({ value: undefined }))
   on('ui.status', () => ({ value: undefined }))
@@ -239,7 +239,7 @@ test('the guard asks before a delete, and a yes lets it run', async ($, on) => {
   await ui.unmount()
 
   // /savvy guard last prints the same in the transcript.
-  const last = await $.command.run({ command: 'savvy', args: 'guard last' } as never)
+  const last = await $.command.run({ command: 'muka', args: 'guard last' } as never)
   expect(last.text).toMatch(/^- \d\d:\d\d:\d\d · confirmed · Main: \[answer "Delete them" after/)
 })
 
@@ -293,7 +293,7 @@ test('with no one to ask, or the guard off, a delete runs and is listed', async 
   expect(asked).toHaveLength(0)
 
   await $.session.start({ cwd: 'C:\\proj', surface: 'terminal', isInteractive: true } as never)
-  const off = await $.command.run({ command: 'savvy', args: 'guard off' } as never)
+  const off = await $.command.run({ command: 'muka', args: 'guard off' } as never)
   expect(off.text).toMatch(/guard off/)
   expect(await $.tool.call({ tool: 'Bash', command: 'rm a.txt' } as never)).toMatchObject({ result: {} })
   expect(asked).toHaveLength(0)
@@ -307,7 +307,7 @@ test('with no one to ask, or the guard off, a delete runs and is listed', async 
   await $.session.start({ cwd: 'C:\\proj', surface: 'terminal', isInteractive: true } as never)
   expect(await $.tool.call({ tool: 'Bash', command: 'rm a.txt' } as never)).toMatchObject({ result: {} })
   expect(asked).toHaveLength(0)
-  const back = await $.command.run({ command: 'savvy', args: 'guard on' } as never)
+  const back = await $.command.run({ command: 'muka', args: 'guard on' } as never)
   expect(back.text).toMatch(/guard on/)
   await $.tool.call({ tool: 'Bash', command: 'rm a.txt' } as never)
   expect(asked).toHaveLength(1)
@@ -341,27 +341,6 @@ test('should know: failures, denials, risky commands, outside writes and a work 
   await ui.press({ key: 'tab-radius' })
   expect(await ui.find({ type: 'Text', text: /Files changed since your last prompt: 2/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /C:\\proj\\src\\a\.ts · 1x · Main/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('the cache tab shows the hit rate per agent', async ($, on) => {
-  engine(on)
-  await start($)
-  await $.agent.spawn({ prompt: 'p', description: 'Look', subagentType: 'Explore' } as never)
-  await $.turn.complete({
-    answer: 'x', durationMs: 5, isAborted: false, turnId: 't-1', agentId: 'agent-1', reason: 'answer',
-    usage: { model: 'claude-haiku-5-5', input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0 },
-  } as never)
-  await $.turn.complete({
-    answer: 'x', durationMs: 4000, isAborted: false, turnId: 't-0', reason: 'answer',
-    usage: { model: 'claude-opus-5-5', input_tokens: 2000, output_tokens: 800, cache_read_input_tokens: 6000, cache_creation_input_tokens: 2000 },
-  } as never)
-
-  const ui = await showTab($, 'tab-cache')
-  expect(await ui.find({ type: 'Text', text: /Main · opus 5\.5.*60% · 6k read · 2k written · 2k fresh \(last turn\)/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Explore · haiku 5\.5.*90% · 9k read/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /All agents.*75%/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Cache .*60% from cache \(last turn\)/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -541,7 +520,7 @@ test('the model\'s own question during a guard ask is a step; a denied step besi
 test('/savvy guard with a typo changes nothing', async ($, on) => {
   engine(on)
   await $.session.start({ cwd: 'C:\\proj', surface: 'terminal', isInteractive: true } as never)
-  const r = await $.command.run({ command: 'savvy', args: 'guard onn' } as never)
+  const r = await $.command.run({ command: 'muka', args: 'guard onn' } as never)
   expect(r.text).toMatch(/guard is on\. Use \/muka guard on or \/muka guard off/)
 })
 

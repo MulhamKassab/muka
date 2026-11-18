@@ -39,7 +39,7 @@ const engine = (on: On, ids = ['agent-1']) => {
   // Nothing sits beneath the plugin: each hook here stands for the engine.
   mock.store(on)
   let spawned = 0
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', () => ({ value: undefined }))
   on('ui.status', () => ({ value: undefined }))
@@ -223,11 +223,11 @@ test('/muka on and off switch the panel; a bare /muka shows the status', async (
   engine(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
-  const status = await $.command.run({ command: 'savvy', args: '' } as never)
+  const status = await $.command.run({ command: 'muka', args: '' } as never)
   expect(status.text).toMatch(/^Muka\n- Panel: on .*\n- Smart rules: on /)
-  const off = await $.command.run({ command: 'savvy', args: 'off' } as never)
+  const off = await $.command.run({ command: 'muka', args: 'off' } as never)
   expect(off.text).toBe('Muka off.')
-  const back = await $.command.run({ command: 'savvy', args: 'on' } as never)
+  const back = await $.command.run({ command: 'muka', args: 'on' } as never)
   expect(back.text).toBe('Muka on: the Muka panel shows the agents at work.')
 })
 
@@ -235,7 +235,7 @@ test('Savvy is on and the delete guard is off by default', async ($, on) => {
   mock.store(on)
   const opened: string[] = []
   let asked = 0
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('ui.open', (_, e) => {

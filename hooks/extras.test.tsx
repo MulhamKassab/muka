@@ -8,9 +8,6 @@ import {
   recapText,
   resetTime,
   statusText,
-  timelineChart,
-  timelineSpans,
-  timelineText,
   usd,
   warnings,
 } from './register'
@@ -71,25 +68,6 @@ test('limits read as one line, with reset times', () => {
   expect(w.some(x => /Your 5h usage limit is 85% used/.test(x))).toBe(true)
 })
 
-test('the timeline places each agent on one time axis', () => {
-  const spans = timelineSpans(
-    { model: 'claude-sonnet-5-5', turnStartedAt: 0, turnEndedAt: 100_000, isWorking: false },
-    [agent({ id: 'a', startedAt: 10_000, endedAt: 60_000, status: 'done' }), agent({ id: 'b', type: 'checker', model: 'opus 5.5', startedAt: 60_000, endedAt: 100_000, status: 'failed' })],
-    100_000,
-  )
-  expect(spans.map(s => s.label)).toEqual(['Main · sonnet 5.5', 'Explore · haiku 5.5', 'checker · opus 5.5'])
-  const lines = timelineText(spans, 10)
-  expect(lines[0]).toMatch(/^Main · sonnet 5\.5\s+██████████ 1m40s$/)
-  expect(lines[1]).toMatch(/·█████···· 50s$/)
-  expect(lines[2]).toMatch(/······████ 40s$/)
-  const chart = timelineChart(spans)
-  expect(chart.source.startsWith('<svg')).toBe(true)
-  expect(chart.source.endsWith('</svg>')).toBe(true)
-  expect(chart.alt).toMatch(/checker · opus 5\.5 ran 40s/)
-  expect(timelineSpans({}, [], 0)).toEqual([])
-  expect(timelineChart([]).source).toMatch(/Nothing has run/)
-})
-
 test('edits become diff hunks whose counts match their lines', () => {
   const edit = editDiff('Edit', { old_string: 'a\nb', new_string: 'a\nc\nd' })!
   expect(edit.diff).toBe('@@ -1,2 +1,3 @@\n-a\n-b\n+a\n+c\n+d')
@@ -132,7 +110,7 @@ const engine = (on: On, ids = ['agent-1']): Calls => {
   let spawned = 0
   on('session.surfaces', () => ({ value: [] }) as never)
   on('session.id', () => ({ value: 'sess-1' }) as never)
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
   on('audio.play', () => {
@@ -212,27 +190,6 @@ test('the cost tab splits the session by agent and by model', async ($, on) => {
   await ui.unmount()
 })
 
-test('the timeline tab draws a text strip, and an SVG on desktop', async ($, on) => {
-  engine(on)
-  await start($)
-  await $.turn.start({ turnId: 't-0', text: 'go' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Look', subagentType: 'Explore' } as never)
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'tab-activity' })
-  await ui.press({ key: 'tab-timeline' })
-  expect(await ui.find({ type: 'Text', text: /^Main · \S+.*[█·]+ \d+s$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Explore · haiku 5\.5 .*█/ })).toBeDefined()
-  await ui.unmount()
-  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await desk.press({ key: 'tab-activity' })
-  await desk.press({ key: 'tab-timeline' })
-  const pictures = await desk.findAll({ type: 'Svg' })
-  // Mission on desktop: the Bridge strip, the timeline, then the spend bar.
-  expect(pictures.some(p => /Timeline\. .*Explore · haiku 5\.5 ran/.test(String(p.props.alt)))).toBe(true)
-  expect(String(pictures[pictures.length - 1]?.props.alt)).toMatch(/^Spend by model/)
-  await desk.unmount()
-})
-
 test('Blast radius shows a file\'s changes as a diff', async ($, on) => {
   engine(on)
   await start($)
@@ -276,13 +233,13 @@ test('a long task pings when done, the push is not a step, and /savvy ping off s
   expect(await ui.find({ type: 'Text', text: /PushNotification/ })).toBeUndefined()
   await ui.unmount()
 
-  const off = await $.command.run({ command: 'savvy', args: 'ping off' } as never)
+  const off = await $.command.run({ command: 'muka', args: 'ping off' } as never)
   expect(off.text).toBe('Muka pings off.')
   await $.turn.start({ turnId: 't-1', text: 'again' } as never)
   await $.turn.complete({ answer: 'x', durationMs: 150_000, isAborted: false, turnId: 't-1', reason: 'answer' } as never)
   expect(calls.notes).toHaveLength(1)
   // A short task never pings.
-  await $.command.run({ command: 'savvy', args: 'ping on' } as never)
+  await $.command.run({ command: 'muka', args: 'ping on' } as never)
   await $.turn.start({ turnId: 't-2', text: 'quick' } as never)
   await $.turn.complete({ answer: 'x', durationMs: 5_000, isAborted: false, turnId: 't-2', reason: 'answer' } as never)
   expect(calls.notes).toHaveLength(1)
@@ -294,11 +251,11 @@ test('/savvy recap lists the day\'s finished prompts', async ($, on) => {
   await $.turn.start({ turnId: 't-0', text: 'fix the login page' } as never)
   await $.tool.call({ tool: 'Write', file_path: 'C:\\work\\Savvy\\login.ts', content: 'x' } as never)
   await $.turn.complete({ answer: 'x', durationMs: 90_000, isAborted: false, turnId: 't-0', reason: 'answer' } as never)
-  const r = await $.command.run({ command: 'savvy', args: 'recap' } as never)
+  const r = await $.command.run({ command: 'muka', args: 'recap' } as never)
   expect(r.text).toMatch(/\*\*Recap for today/)
   expect(r.text).toMatch(/\*\*Savvy\*\* \(1 prompt\)/)
   expect(r.text).toMatch(/"fix the login page" · 1m30s · 1 file/)
-  const y = await $.command.run({ command: 'savvy', args: 'recap yesterday' } as never)
+  const y = await $.command.run({ command: 'muka', args: 'recap yesterday' } as never)
   expect(y.text).toMatch(/No finished prompts logged for yesterday/)
 })
 

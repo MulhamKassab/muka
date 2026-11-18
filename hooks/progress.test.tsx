@@ -52,7 +52,7 @@ test('the panel shows the progress bar as the task list moves', async ($, on) =>
   mock.env(on, {})
   mock.clock(on)
   on('session.surfaces', () => ({ value: [] }) as never)
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))

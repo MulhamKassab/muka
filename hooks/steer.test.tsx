@@ -50,7 +50,7 @@ const engine = (on: On, seen: { context: string[][] }) => {
   mock.clock(on)
   let n = 0
   on('session.surfaces', () => ({ value: [] }) as never)
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))

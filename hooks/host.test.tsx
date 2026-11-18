@@ -13,7 +13,7 @@ const host = (on: On, entrypoint: string | undefined) => {
   mock.env(on, entrypoint ? { CLAUDE_CODE_ENTRYPOINT: entrypoint } : {})
   mock.clock(on)
   on('session.surfaces', () => ({ value: [] }) as never)
-  on('command.register', () => ({ value: { command: 'savvy' } }))
+  on('command.register', () => ({ value: { command: 'muka' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
