@@ -2495,6 +2495,105 @@ export const lanesCard = (feed: ActivityItem[], list: SubAgent[], now = Date.now
   return { source: card(W, Hh, parts.join('')), alt: clip(alt, 1000) }
 }
 
+/**
+ * One helper as the card on top of its control page: a large glossy sphere
+ * with its icon (a halo and a ping while it works), its name, model, status,
+ * time, steps and estimated cost, what it is doing now, a mini lane of its
+ * last 20 steps (failures red) and the helpers it started.
+ */
+export const agentCard = (agent: SubAgent, list: SubAgent[], feed: ActivityItem[], now = Date.now()): Card => {
+  const W = HELM_W
+  const isStuck = stuckAgents(list, now).some(s => s.agent.id === agent.id)
+  const live = agent.status === 'running'
+  const hue = isStuck ? H.red : helmHue(agent.status)
+  const cost = estimateUsd(agent.usage, agent.model)
+  const took = duration((agent.endedAt ?? now) - agent.startedAt)
+  const statusText = isStuck ? 'may be stuck' : live ? 'working' : agent.status
+  const own = feed.filter(s => s.agentId === agent.id)
+  const steps = (own.length >= agent.steps.length ? own : agent.steps).slice(-20)
+  const last = agent.steps.at(-1) ?? steps.at(-1)
+  const kids = list.filter(c => c.parentId === agent.id).slice(0, 10)
+  const parts: string[] = []
+  // The sphere.
+  const cx = 62
+  const cy = 70
+  const r = 34
+  if (live) {
+    parts.push(`<circle class="halo" cx="${cx}" cy="${cy}" r="${r + 14}" fill="${hue}" fill-opacity=".14"/>`)
+    parts.push(`<circle class="ping" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${hue}" stroke-width="2"/>`)
+  }
+  parts.push(`<circle class="${live && isStuck ? 'pulse-fast' : ''}" cx="${cx}" cy="${cy}" r="${r}" fill="${agent.status === 'stopped' ? '#FFFFFF' : grad('n', hue)}" stroke="${hue}" stroke-width="2.5"/>`)
+  parts.push(`<ellipse cx="${cx - 11}" cy="${cy - 16}" rx="13" ry="7" fill="#FFFFFF" fill-opacity=".45" transform="rotate(-28 ${cx - 11} ${cy - 16})"/>`)
+  parts.push(`<text x="${cx}" y="${cy + 12}" text-anchor="middle" style="font-size:34px">${agentIcon(agent.type)}</text>`)
+  if (agent.status === 'done' || agent.status === 'failed') {
+    const bh = agent.status === 'done' ? H.green : H.red
+    parts.push(
+      `<circle cx="${cx + 26}" cy="${cy - 26}" r="9" fill="${bh}" stroke="#FFFFFF" stroke-width="2"/>` +
+        `<text x="${cx + 26}" y="${cy - 22}" text-anchor="middle" class="chip" style="font-size:11px;font-weight:900;fill:#FFFFFF">${agent.status === 'done' ? '✓' : '✗'}</text>`,
+    )
+  }
+  // Name, model, status and time, steps and cost.
+  parts.push(`<text x="112" y="46" class="hn" style="font-size:19px">${xml(clip(agent.type, 22))}</text>`)
+  parts.push(`<text x="112" y="66" class="hs" style="font-size:13px;fill:${hue}">${xml(clip(`${agent.guardedFrom ? '⤵ ' : ''}${agent.model}`, 34))}</text>`)
+  parts.push(`<text x="112" y="86" class="hs" style="font-size:13px;font-weight:700;fill:${hue}">${xml(`${live && !isStuck ? '● ' : ''}${statusText} · ${took}`)}</text>`)
+  parts.push(`<text x="112" y="106" class="hs" style="font-size:12px">${xml(`${plural(agent.stepCount ?? 0, 'step')} · ${cost > 0 ? `${usd(cost)} est.` : 'cost after it finishes'}`)}</text>`)
+  // What it is doing now.
+  parts.push(`<rect x="20" y="124" width="${W - 40}" height="34" rx="10" fill="${grad('t', hue)}" stroke="${hue}" stroke-opacity=".3"/>`)
+  parts.push(
+    last
+      ? `<text x="32" y="146" class="ht" style="font-size:12.5px;font-weight:600">${live ? `<tspan class="pulse" style="fill:${hue}">▸</tspan> ` : `<tspan style="fill:${H.mute}">last:</tspan> `}${xml(clip(stepText(last), 48))}</text>`
+      : `<text x="32" y="146" class="hs" style="font-size:12.5px">${live ? 'starting' : 'no steps recorded'}</text>`,
+  )
+  // The mini lane of its last 20 steps.
+  let y = 186
+  parts.push(`<text x="20" y="${y}" class="hl">${steps.length > 0 ? `LAST ${steps.length} STEPS` : 'LAST STEPS'}</text>`)
+  const failed = steps.filter(s => s.outcome).length
+  parts.push(`<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="font-size:11px${failed > 0 ? `;fill:${H.red}` : ''}">${xml(failed > 0 ? `${failed} failed` : 'none failed')}</text>`)
+  y += 22
+  if (steps.length === 0) {
+    parts.push(`<text x="20" y="${y + 4}" class="hs" style="fill:${H.faint};font-size:12px">No steps yet.</text>`)
+  } else {
+    const gap = (W - 40 - 12) / 19
+    parts.push(`<line x1="26" y1="${y}" x2="${W - 26}" y2="${y}" stroke="${H.line}" stroke-width="2" stroke-linecap="round"/>`)
+    steps.forEach((s, i) => {
+      const isLast = live && i === steps.length - 1
+      parts.push(
+        `<circle class="${isLast ? 'pulse' : 'pop'}" style="${isLast ? '' : delay(i, 0.015)}" cx="${(26 + i * gap).toFixed(1)}" cy="${y}" r="${s.outcome ? 5 : 4}" fill="${s.outcome ? H.red : hue === H.red ? H.cyan : hue}"><title>${xml(`${clock(s.at)} ${stepText(s)}`)}</title></circle>`,
+      )
+    })
+  }
+  y += 22
+  // The helpers it started.
+  if (kids.length > 0) {
+    y += 14
+    parts.push(`<text x="20" y="${y}" class="hl">${xml(`HELPERS IT STARTED · ${kids.length}`)}</text>`)
+    const per = 5
+    const colW = (W - 40) / per
+    kids.forEach((k, i) => {
+      const kx = 20 + colW / 2 + (i % per) * colW
+      const ky = y + 30 + Math.floor(i / per) * 68
+      const kHue = stuckAgents(list, now).some(s => s.agent.id === k.id) ? H.red : helmHue(k.status)
+      parts.push(`<g class="node"><title>${xml(`${k.type} · ${k.model} · ${k.status}`)}</title>`)
+      if (k.status === 'running') parts.push(`<circle class="halo" cx="${kx.toFixed(1)}" cy="${ky}" r="17" fill="${kHue}" fill-opacity=".14"/>`)
+      parts.push(
+        `<circle cx="${kx.toFixed(1)}" cy="${ky}" r="11" fill="${k.status === 'stopped' ? '#FFFFFF' : grad('n', kHue)}" stroke="${kHue}" stroke-width="2"/>` +
+          `<text x="${kx.toFixed(1)}" y="${ky + 4.5}" text-anchor="middle" style="font-size:13px">${agentIcon(k.type)}</text>` +
+          `<text x="${kx.toFixed(1)}" y="${ky + 26}" class="ht" text-anchor="middle" style="font-size:11px;font-weight:600">${xml(clip(k.type, 10))}</text>` +
+          `<text x="${kx.toFixed(1)}" y="${ky + 38}" class="hs" text-anchor="middle" style="font-size:10px;fill:${kHue}">${xml(k.status === 'running' ? '▸ working' : k.status)}</text></g>`,
+      )
+    })
+    y += 30 + (Math.ceil(kids.length / per) - 1) * 68 + 44
+  }
+  const Hh = y + 6
+  const alt = clip(
+    clean(
+      `${agent.type} helper (${agent.model}), ${statusText}, ${took}, ${plural(agent.stepCount ?? 0, 'step')}${cost > 0 ? `, about ${usd(cost)}` : ''}. ${last ? `${live ? 'Doing' : 'Last step'}: ${stepText(last)}.` : ''} Task: ${agent.description || 'none given'}.${kids.length > 0 ? ` Started ${kids.map(k => `${k.type} (${k.status})`).join(', ')}.` : ''}`,
+    ),
+    1000,
+  )
+  return { source: card(W, Hh, parts.join(''), isStuck ? H.red : H.line, { live }), alt }
+}
+
 /** A tile set for a finished turn: time, steps, helpers, tokens, cache, files. */
 export const recapTiles = (rc: Recap | undefined): Card =>
   tilesCard(
@@ -2924,7 +3023,7 @@ const takeSteerNotes = async ($: EngineInterface, agentId: string | undefined): 
   return waiting
 }
 
-const sendSteer = async ($: EngineInterface, text: string): Promise<void> => {
+const sendSteer = async ($: EngineInterface, text: string, sentToast?: string): Promise<void> => {
   const body = clean(text)
   if (body === '') return
   const to = await read($, steerTo)
@@ -2938,7 +3037,40 @@ const sendSteer = async ($: EngineInterface, text: string): Promise<void> => {
     const note: SteerNote = { id: `steer-${Date.now()}-${++noticeSeq}`, text: noteText, to: target, toLabel, at: Date.now() }
     await update($, steer, l => [...l, note].slice(-20))
   }
-  await Promise.resolve($.ui.toast(isRepeat ? `Already waiting for ${toLabel}` : `🎯 Sent to ${toLabel}: it reads it at its next step`)).catch(() => undefined)
+  await Promise.resolve($.ui.toast(isRepeat ? `Already waiting for ${toLabel}` : (sentToast ?? `🎯 Sent to ${toLabel}: it reads it at its next step`))).catch(() => undefined)
+}
+
+/** What Main is asked to do to pass a note on to a helper that has finished. */
+export const resumeNote = (a: { type: string; id: string }, text: string): string =>
+  `Resume the ${a.type} helper (agent id ${a.id}) with SendMessage and give it this from the user: ${text}`
+
+/** The quick buttons on a helper's control page: key, label and the text each sends. */
+export const AGENT_QUICK: { key: string; label: string; text: string }[] = [
+  { key: 'wrap', label: '⏸ Wrap up', text: STEER_PRESETS.find(p => p.key === 'wrap')!.text },
+  { key: 'stop', label: '⏹ Stop', text: 'Stop now: finish nothing new, and report what you have and what is left.' },
+  { key: 'explain', label: '💬 Explain', text: STEER_PRESETS.find(p => p.key === 'explain')!.text },
+  { key: 'smaller', label: '🔬 Smaller steps', text: STEER_PRESETS.find(p => p.key === 'smaller')!.text },
+  { key: 'cheaper', label: '💲 Keep cheap', text: STEER_PRESETS.find(p => p.key === 'cheaper')!.text },
+  { key: 'verify', label: '✅ Verify', text: 'Verify your piece before reporting: run its tests and build, and say what ran and what was not checked.' },
+]
+
+/**
+ * A note for one helper from its control page. While it runs, it rides on the
+ * helper's next step; once it has finished the helper cannot read it, so Main
+ * is asked to resume it with SendMessage and pass the note on.
+ */
+const tellAgent = async ($: EngineInterface, agentId: string, text: string): Promise<void> => {
+  const body = clean(text)
+  if (body === '') return
+  const a = (await read($, agents)).find(x => x.id === agentId)
+  if (!a) return
+  if (a.status === 'running') {
+    await update($, steerTo, () => a.id)
+    await sendSteer($, body)
+    return
+  }
+  await update($, steerTo, () => 'main')
+  await sendSteer($, resumeNote(a, body), `🎯 Main will pass it on to the ${a.type} helper`)
 }
 
 /** The dollar steps the Bridge's Budget button cycles through, then off. */
@@ -4395,6 +4527,61 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       const touched = files.filter(f => f.agents.includes(open.type)).slice(0, 6)
       const sentTo = (await read($, steer)).filter(n => n.to === open.id).slice(-3)
       const isRunning = open.status === 'running'
+      // Desktop: a control page. The picture and the message box come first
+      // (pressing redraws and the pane scrolls to the top), then the buttons
+      // and the steps as text.
+      if (isDesk) {
+        const { Input } = $.ui.resolve(e)
+        const feedItems = await read($, activity)
+        const nav = (
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            <Button key="agent-back" label="← All agents" onPress={() => update($, focus, () => '')} />
+            {open.parentId && list.some(a => a.id === open.parentId) ? <Button key="agent-parent" label="↑ Parent" onPress={() => update($, focus, () => open.parentId ?? '')} /> : ''}
+          </Box>
+        )
+        return page([
+          pic(agentCard(open, list, feedItems, Date.now())),
+          <Input
+            key="agent-msg"
+            placeholder={isRunning ? `Tell the ${open.type} something (Enter)` : `Ask Main to pass a note to the ${open.type} (Enter)`}
+            submitLabel="Send"
+            onSubmit={text => tellAgent($, open.id, text)}
+          />,
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {AGENT_QUICK.map(q => (
+              <Button key={`agent-q-${q.key}`} label={q.label} onPress={() => tellAgent($, open.id, q.text)} />
+            ))}
+          </Box>,
+          nav,
+          <Text dimColor>{breadcrumb(list, open.id)}</Text>,
+          <Text>Task: {open.description || '(no description)'}</Text>,
+          ...(kidsOf.length > 0
+            ? [
+                <Text bold>Helpers it started</Text>,
+                <Box flexDirection="row" flexWrap="wrap" gap={1}>
+                  {kidsOf.slice(0, 8).map(k => (
+                    <Button key={`agent-kid-${k.id}`} label={`${icon(k.status)} ${clip(k.type, 18)}`} onPress={() => update($, focus, () => k.id)} />
+                  ))}
+                </Box>,
+              ]
+            : []),
+          ...(touched.length > 0 ? [<Text dimColor>Files: {touched.map(f => `${baseName(f.path)} (${f.count}x)`).join(', ')}</Text>] : []),
+          ...sentTo.map(n => (
+            <Text dimColor>
+              {n.deliveredAt ? '✓' : '…'} note: {clip(n.text, 60)}
+            </Text>
+          )),
+          <Text bold>Steps, newest first</Text>,
+          ...(steps.length === 0
+            ? [<Text dimColor>No steps yet.</Text>]
+            : steps.slice(0, 8).map(s => (
+                <Text>
+                  <Text dimColor>{clock(s.at)}</Text> <Text color={s.outcome ? 'red' : 'green'}>{stepMark(s)}</Text> {stepText(s)}
+                </Text>
+              ))),
+          steps.length > 8 ? <Text dimColor>… and {steps.length - 8} earlier</Text> : <Text> </Text>,
+        ])
+      }
       return page([
         isRunning ? (
           <Box flexDirection="row" flexWrap="wrap" gap={1}>
@@ -4449,15 +4636,22 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       ])
     }
 
-    // A button per agent to open its detail view.
+    // A chip per helper, numbered and in the same order as the Orbit's
+    // bubbles: tap one to open its control page.
+    const stuckIds = new Set(stuckAgents(list).map(s => s.agent.id))
     const openers =
       list.length > 0 ? (
-        <Box flexDirection="row" flexWrap="wrap" gap={1}>
-          {treeRows(list)
-            .slice(0, 12)
-            .map(r => (
-              <Button key={`agent-${r.agent.id}`} label={`Open ${icon(r.agent.status)} ${clip(r.agent.type, 16)}`} onPress={() => update($, focus, () => r.agent.id)} />
-            ))}
+        <Box flexDirection="column" gap={1}>
+          <Text dimColor>Tap a helper to open it</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {treeRows(list)
+              .slice(0, ORBIT_MAX_CROWD)
+              .map((r, i) => {
+                const a = r.agent
+                const mark = stuckIds.has(a.id) ? ' ⚠' : a.status === 'running' ? ' ▸' : a.status === 'done' ? ' ✓' : a.status === 'failed' ? ' ✗' : ''
+                return <Button key={`agent-${a.id}`} label={`${i + 1} ${agentIcon(a.type)} ${clip(a.type, 24)}${mark}`} variant={a.status === 'running' ? 'primary' : 'secondary'} onPress={() => update($, focus, () => a.id)} />
+              })}
+          </Box>
         </Box>
       ) : (
         <Text> </Text>
