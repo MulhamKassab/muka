@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { actualSize, contextNudge, efficiencyReport, guardModel, helperBrief, levelOf, orbitAgents, spawnLimit, looksLarge, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
+import { actualSize, contextNudge, efficiencyReport, guardModel, helperBrief, levelOf, orbitLegend, looksLarge, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
 import type { LogEntry, SubAgent } from '../types'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
@@ -93,7 +93,8 @@ test('the model guard leaves the master pick alone and stops only clear waste', 
   expect(guardModel('Explore', 'claude-opus-5-5')).toBe('haiku')
   expect(guardModel('builder', 'haiku')).toBe('sonnet')
   expect(guardModel('general-purpose', 'haiku')).toBe('sonnet')
-  expect(guardModel('general-purpose', 'fable')).toBe('opus')
+  // Fable is free: the master may pick it.
+  expect(guardModel('general-purpose', 'fable')).toBeUndefined()
   // Left alone: the checker, forks, and a helper that names no model.
   expect(guardModel('checker', 'opus')).toBeUndefined()
   expect(guardModel('fork', 'fable')).toBeUndefined()
@@ -109,6 +110,12 @@ test('a helper asking for the wrong model is started on the right one, and marke
   })
   await $.session.start({ cwd: 'C:\work', surface: 'terminal', isInteractive: true } as never)
   await $.turn.start({ turnId: 't1', text: 'look around' } as never)
+  // Off by default: the pick stands.
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'opus' } as never)
+  expect(asked).toEqual(['opus'])
+  asked.length = 0
+  // Turned on, clear waste is stopped.
+  await $.command.run({ command: 'muka', args: 'models on' } as never)
   await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'opus' } as never)
   expect(asked).toEqual(['haiku'])
   // Switched off, the helper gets what it asked for.
@@ -181,57 +188,39 @@ test('review fixes: different failing edits are not a retry loop; a solo task of
 
 const sub = (over: Partial<SubAgent>): SubAgent => ({ id: 'a', type: 'builder', description: 'd', model: 'sonnet', status: 'running', startedAt: 0, steps: [], stepCount: 0, ...over })
 
-test('sub-masters: two levels at most, three live helpers per agent, and a short brief', () => {
-  const list = [sub({ id: 'b1' }), sub({ id: 'b2', parentId: 'b1' })]
+test('every helper is a sub-master at any depth, with a short brief', () => {
+  const list = [sub({ id: 'b1' }), sub({ id: 'b2', parentId: 'b1' }), sub({ id: 'b3', parentId: 'b2' })]
   expect(levelOf(list, undefined)).toBe(1)
   expect(levelOf(list, 'b1')).toBe(2)
-  expect(levelOf(list, 'b2')).toBe(3)
-  expect(spawnLimit(list, undefined)).toBeUndefined()
-  expect(spawnLimit(list, 'b1')).toBeUndefined()
-  expect(spawnLimit(list, 'b2')).toMatch(/nesting limit/)
-  const busy = [sub({ id: 'b1' }), ...[1, 2, 3].map(n => sub({ id: `k${n}`, parentId: 'b1' }))]
-  expect(spawnLimit(busy, 'b1')).toMatch(/at most 3 helpers/)
-  expect(spawnLimit(busy.map(a => (a.id === 'k1' ? { ...a, status: 'done' as const } : a)), 'b1')).toBeUndefined()
-  expect(helperBrief(1)).toMatch(/may run it as a sub-master/)
-  expect(helperBrief(2)).toMatch(/deepest level: do your piece yourself/)
+  expect(levelOf(list, 'b3')).toBe(4)
+  expect(helperBrief(3)).toMatch(/You are a sub-master/)
+  expect(helperBrief(3)).toMatch(/opus or fable/)
   expect(helperBrief(1).length).toBeLessThan(1200)
 })
 
-test('a helper gets the brief with its prompt, and a spawn past two levels is refused', async ($, on) => {
+test('a helper gets the brief with its prompt, and helpers may start helpers at any depth', async ($, on) => {
   engine(on)
   const prompts: string[] = []
   on('agent.spawn', (_, e) => {
     prompts.push(e.prompt)
     return { model: 'claude-sonnet-5-5', agentId: `agent-${prompts.length}` }
   })
-  await $.session.start({ cwd: 'C:\work', surface: 'terminal', isInteractive: true } as never)
+  await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   await $.turn.start({ turnId: 't1', text: 'build it' } as never)
   await $.agent.spawn({ subagentType: 'builder', description: 'Piece A', prompt: 'do A' } as never)
-  expect(prompts[0]).toMatch(/^do A\n\nMuka \(the user's coordination rules\), for this helper at level 1 of 2/)
+  expect(prompts[0]).toMatch(/^do A\n\nMuka \(the user's coordination rules\), for this helper \(level 1/)
   await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'look', parentAgentId: 'agent-1' } as never)
   expect(prompts[1]).toBe('look')
   await $.agent.spawn({ subagentType: 'builder', description: 'Part', prompt: 'do part', parentAgentId: 'agent-1' } as never)
-  expect(prompts[2]).toMatch(/level 2 of 2/)
-  const deep = (await $.agent.spawn({ subagentType: 'builder', description: 'Too deep', prompt: 'x', parentAgentId: 'agent-3' } as never)) as { deny?: string }
-  expect(deep.deny).toMatch(/nesting limit/)
-  expect(prompts).toHaveLength(3)
+  const deep = (await $.agent.spawn({ subagentType: 'builder', description: 'Deeper', prompt: 'x', parentAgentId: 'agent-3' } as never)) as { deny?: string }
+  expect(deep.deny).toBeUndefined()
+  expect(prompts[3]).toMatch(/level 3/)
 })
 
-test('a crowded orbit groups finished helpers by type and keeps the working ones', () => {
-  const few = [sub({ id: 'a1', status: 'done' }), sub({ id: 'a2' })]
-  expect(orbitAgents(few).crowded).toBe(false)
-  const many = [
-    ...[1, 2, 3, 4, 5, 6, 7].map(n => sub({ id: `d${n}`, status: 'done', stepCount: 10, usage: { input: 1000, output: 100, cacheRead: 0, cacheWrite: 0 } })),
-    sub({ id: 'e1', type: 'Explore', model: 'haiku', status: 'done' }),
-    sub({ id: 'w1' }),
-    sub({ id: 'f1', status: 'failed' }),
-  ]
-  const view = orbitAgents(many)
-  expect(view.crowded).toBe(true)
-  const group = view.shown.find(a => a.id === 'group:builder')!
-  expect(group.count).toBe(7)
-  expect(group.stepCount).toBe(70)
-  expect(group.costUsd).toBeGreaterThan(0)
-  // The running and the failed stay on their own; a lone finished helper stays as it is.
-  expect(view.shown.map(a => a.id).sort()).toEqual(['e1', 'f1', 'group:builder', 'w1'])
+test('a crowded orbit lists every helper in a numbered legend', () => {
+  const many = [...[1, 2, 3, 4, 5, 6, 7].map(n => sub({ id: `d${n}`, status: 'done' })), sub({ id: 'w1', steps: [{ tool: 'Bash', label: 'Bash: npm test', at: 0 }] }), sub({ id: 'k1', parentId: 'w1' })]
+  const legend = orbitLegend(many, 1000, 20, 0, 360)
+  expect(legend.parts).toMatch(/9 HELPERS · 2 WORKING · 7 FINISHED/)
+  for (let n = 1; n <= 9; n++) expect(legend.parts).toContain(`>${n}</text>`)
+  expect(legend.parts).toMatch(/▸ Bash: npm test/)
 })

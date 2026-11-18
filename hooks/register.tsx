@@ -25,7 +25,7 @@ const PANE = 'muka'
 const TITLE = 'Muka'
 
 /** The coordination rules Muka adds while smart is on (they used to live in CLAUDE.md). */
-export const MUKA_RULES = "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short.\n\n## Size every task first\n\nBefore starting, decide the size and say it in one line (for example \"Size: M\").\n\n- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.\n- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.\n- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: \"Large tasks\" below.\n- **Careful mode**: only when the user says \"careful mode\", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.\n\n## Large tasks: plan, then swarm\n\n1. **Scout.** One or two `Explore` helpers map the relevant code. Ask for locations and facts, never whole files.\n2. **Plan.** Write `PLAN.md` in the scratchpad with:\n   - a `Budget: $N` line only if the user gave a budget for this task (none by default),\n   - the phases, one short line each (they become the progress bar),\n   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,\n   - the shared interfaces between pieces, fixed before anyone builds.\n   Consult the advisor once, on this plan.\n3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see \"Sub-masters\").\n4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.\n5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.\n6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.\n\nKeep the team small: one or two builders is usual; more only when the pieces are truly separate.\n\n## Helpers\n\n- **Model and effort:** set both for every helper you start (the Agent tool's `model` and `effort`; this rule is the user's explicit instruction to set them). Choose by what the piece needs, not by habit:\n  - searching, reading, listing, simple lookups (`Explore`): `haiku`, effort `low`;\n  - routine code, tests, docs, reviews: `sonnet`, effort `medium`;\n  - tricky bugs, changes across many files, risky migrations: `sonnet` with effort `high`;\n  - hard reasoning the whole result depends on (architecture, security, a failure that resisted `sonnet`): `opus`, effort `high`;\n  - `fable`: only when the user asks for it.\n  Start at the lowest level that fits and step up one level only after a real shortfall (a failed attempt, a wrong answer), never \"just in case\". Never `haiku` for writing code.\n- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.\n- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.\n- **Stop rules (at every level):**\n  - the same error twice: change the approach (the main session may consult the advisor once);\n  - a helper on one step for 5+ minutes: steer it or replace it;\n  - if the user set a budget: at 70% start wrapping up; at 100% start no new helpers, finish the piece in hand, and report what is left.\n- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.\n\n## Sub-masters\n\nAny helper that writes code may run its piece the way the master runs the task: size it, plan it in a few lines, start its own helpers, fit and test their work, and report up. Each sub-master follows these same rules, with limits that keep usage down:\n\n- **Two levels at most:** master → helper → sub-helper. A sub-helper does its piece itself; Muka refuses deeper spawns.\n- **Split only M or L pieces,** never an S one, and only into parts with their own files. At most 3 helpers running at once under one agent (Muka refuses a fourth).\n- **`Explore`, `reviewer` and `checker` never start helpers.**\n- **Pick model and effort the same way,** and never higher than your own unless your piece truly needs it.\n- **Reports stay at 150 words at every level,** so nothing large flows back up. Helpers never ask the user; they report the question up.\n\nThe user sees every agent and sub-agent live in Muka's panel.\n\n## Questions\n\nWhen you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait."
+export const MUKA_RULES = "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short.\n\n## Size every task first\n\nBefore starting, decide the size and say it in one line (for example \"Size: M\").\n\n- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.\n- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.\n- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: \"Large tasks\" below.\n- **Careful mode**: only when the user says \"careful mode\", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.\n\n## Large tasks: plan, then swarm\n\n1. **Scout.** One or two `Explore` helpers map the relevant code. Ask for locations and facts, never whole files.\n2. **Plan.** Write `PLAN.md` in the scratchpad with:\n   - a `Budget: $N` line only if the user gave a budget for this task (none by default),\n   - the phases, one short line each (they become the progress bar),\n   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,\n   - the shared interfaces between pieces, fixed before anyone builds.\n   Consult the advisor once, on this plan.\n3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see \"Sub-masters\"), at any depth.\n4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.\n5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.\n6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.\n\nKeep the team small: one or two builders is usual; more only when the pieces are truly separate.\n\n## Helpers\n\n- **Model and effort:** set both for every helper you start (the Agent tool's `model` and `effort`; this rule is the user's explicit instruction to set them). Any model is allowed (`haiku`, `sonnet`, `opus`, `fable`) at any effort (`low` to `max`): choose what gives the best result for the piece at a sensible cost. A guide, not a limit:\n  - searching, reading, listing, simple lookups: `haiku`, `low`;\n  - routine code, tests, docs, reviews: `sonnet`, `medium`;\n  - tricky bugs, changes across many files, risky migrations: `sonnet` or `opus`, `high`;\n  - hard reasoning the whole result depends on (architecture, security, a stubborn failure): `opus` or `fable`, `high` or `max`.\n  Pay for strength where it changes the result; don't spend it on work a cheaper model does just as well.\n- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.\n- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.\n- **Stop rules (at every level):**\n  - the same error twice: change the approach (the main session may consult the advisor once);\n  - a helper on one step for 5+ minutes: steer it or replace it;\n  - if the user set a budget: at 70% start wrapping up; at 100% start no new helpers, finish the piece in hand, and report what is left.\n- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.\n\n## Sub-masters\n\nEvery helper is a sub-master: it may run its piece the way the master runs the task (size it, plan it in a few lines, start its own helpers, fit and test their work, report up), and its helpers may do the same, at any depth. Each level follows these same rules, including picking any model and effort for its own helpers. To keep usage sensible:\n\n- **Split only when it pays:** an M or L piece with parts that have their own files. Do an S piece yourself.\n- **Keep each team small:** start the helpers the work needs, not more.\n- **Reports stay at 150 words at every level,** so nothing large flows back up. Helpers never ask the user; they report the question up.\n\nThe user sees every agent and sub-agent live in Muka's panel.\n\n## Questions\n\nWhen you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait."
 
 // Smart: the rules are on in every chat unless /muka smart off turned them off.
 let isSmart = true
@@ -2007,53 +2007,55 @@ const ORBIT_MAX = 16
 /** An agent as the orbit draws it: a real one, or a group of finished helpers of one type. */
 export type OrbitAgent = SubAgent & { count?: number; costUsd?: number }
 
-/** Past this many helpers the orbit is crowded: finished helpers group by type, and labels shorten. */
+/** Past this many helpers the orbit is crowded: small numbered bubbles, and a legend lists them all. */
 export const ORBIT_CROWD = 6
+/** How many helpers a crowded orbit and its legend show. */
+const ORBIT_MAX_CROWD = 30
 
 /**
- * What the orbit draws: every helper while there are few; past ORBIT_CROWD,
- * the running, failed and stuck helpers one by one, and the finished ones
- * grouped by type ("builder ×9"), with their steps and cost summed.
+ * The legend under a crowded orbit: every helper in tree order, numbered as
+ * its bubble, indented by depth, with its model and what it is doing now or
+ * how it ended. Two columns past ten helpers.
  */
-export const orbitAgents = (list: SubAgent[], now = Date.now()): { shown: OrbitAgent[]; crowded: boolean } => {
-  if (list.length <= ORBIT_CROWD) return { shown: list, crowded: false }
+export const orbitLegend = (list: SubAgent[], now: number, x: number, y: number, w: number): { parts: string; height: number } => {
+  const rows = treeRows(list).slice(0, ORBIT_MAX_CROWD)
   const stuck = new Set(stuckAgents(list, now).map(s => s.agent.id))
-  const single = list.filter(a => a.status === 'running' || a.status === 'failed' || stuck.has(a.id))
-  const ids = new Set(single.map(a => a.id))
-  const shown: OrbitAgent[] = single.map(a => (a.parentId !== undefined && !ids.has(a.parentId) ? { ...a, parentId: undefined } : a))
-  const groups = new Map<string, SubAgent[]>()
-  for (const a of list) if (!ids.has(a.id)) groups.set(a.type, [...(groups.get(a.type) ?? []), a])
-  for (const [type, members] of groups) {
-    if (members.length === 1) {
-      shown.push({ ...members[0]!, parentId: undefined })
-      continue
-    }
-    const models = new Map<string, number>()
-    for (const m of members) models.set(m.model, (models.get(m.model) ?? 0) + 1)
-    const model = [...models].sort((a, b) => b[1] - a[1])[0]![0]
-    shown.push({
-      id: `group:${type}`,
-      type,
-      description: `${members.length} finished ${type} helpers`,
-      model,
-      status: members.every(m => m.status === 'stopped') ? 'stopped' : 'done',
-      startedAt: Math.min(...members.map(m => m.startedAt)),
-      endedAt: Math.max(...members.map(m => m.endedAt ?? m.startedAt)),
-      steps: [],
-      stepCount: members.reduce((n, m) => n + (m.stepCount ?? 0), 0),
-      count: members.length,
-      costUsd: members.reduce((n, m) => n + estimateUsd(m.usage, m.model), 0),
-    })
-  }
-  return { shown, crowded: true }
+  const c = counts(list)
+  const cols = rows.length > 10 ? 2 : 1
+  const per = Math.max(1, Math.ceil(rows.length / cols))
+  const colW = w / cols
+  const RH = 17
+  const parts: string[] = [
+    `<text x="${x}" y="${y + 10}" class="hl">${xml(`${plural(list.length, 'helper')} · ${c.running} working · ${c.finished} finished`.toUpperCase())}</text>`,
+  ]
+  rows.forEach((r, i) => {
+    const a = r.agent
+    const ind = Math.min(r.depth, 4) * 9
+    const rx = x + Math.floor(i / per) * colW + ind
+    const ry = y + 28 + (i % per) * RH
+    const isStuck = stuck.has(a.id)
+    const hue = isStuck ? H.red : helmHue(a.status)
+    const cost = estimateUsd(a.usage, a.model)
+    const doing = a.status === 'running' ? a.steps.at(-1) : undefined
+    const tail = isStuck ? '⚠ stuck' : doing ? `▸ ${stepText(doing)}` : a.status === 'done' ? `✓${cost > 0 ? ` ${usd(cost)}` : ''}` : a.status === 'failed' ? '✗ failed' : a.status
+    const room = Math.max(8, Math.floor((colW - ind - 20) / 5.5))
+    const name = clip(a.type, 12)
+    const model = clip(a.model, Math.max(4, room - name.length - 8))
+    const rest = Math.max(4, room - name.length - model.length - 2)
+    parts.push(
+      `<circle cx="${rx + 6}" cy="${ry - 4}" r="6.5" fill="${hue}"/>` +
+        `<text x="${rx + 6}" y="${ry - 1}" text-anchor="middle" class="chip" style="font-size:8px;fill:#FFFFFF">${i + 1}</text>` +
+        `<text x="${rx + 17}" y="${ry}" class="hs" style="font-size:10.5px"><tspan style="fill:${H.text};font-weight:600">${xml(name)}</tspan> <tspan style="fill:${hue}">${xml(model)}</tspan> ${xml(clip(tail, rest))}</text>`,
+    )
+  })
+  return { parts: parts.join(''), height: 28 + per * RH }
 }
 
 /** The orbit's own marks around (cx, cy): Main at the centre, helpers on the inner ring, nested helpers outside. */
 const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy: number, r1: number, r2: number, nameMax: number, maxX = HELM_W): string => {
-  const view = orbitAgents(list, now)
-  const all = view.shown
-  const crowded = view.crowded
-  const rows = treeRows(all).slice(0, ORBIT_MAX)
+  const all: OrbitAgent[] = list
+  const crowded = list.length > ORBIT_CROWD
+  const rows = treeRows(all).slice(0, crowded ? ORBIT_MAX_CROWD : ORBIT_MAX)
   const parents = treeParents(rows)
   const stuck = new Set(stuckAgents(list, now).map(s => s.agent.id))
   const top = rows.flatMap((r, i) => (parents[i] === undefined ? [i] : []))
@@ -2068,11 +2070,12 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     return leaves[i]!
   }
   const total = top.reduce((n, i) => n + countLeaves(i), 0) || 1
+  const maxDepth = Math.max(0, ...rows.map(r => r.depth))
   const pos: { x: number; y: number; angle: number }[] = []
   const place = (i: number, from: number, span: number) => {
     const depth = rows[i]!.depth
     const angle = from + span / 2
-    const rr = depth === 0 ? r1 : depth === 1 ? r2 : r2 + 24 * (depth - 1)
+    const rr = crowded ? r1 + (maxDepth > 0 ? ((r2 + 12 - r1) * depth) / maxDepth : 0) : depth === 0 ? r1 : depth === 1 ? r2 : r2 + 24 * (depth - 1)
     // Kept far enough from either edge for its labels to fit.
     const x = Math.min(maxX - 105, Math.max(105, cx + rr * Math.cos(angle)))
     pos[i] = { x, y: cy + rr * Math.sin(angle), angle }
@@ -2142,14 +2145,6 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       `<text class="ht tag" x="${cx}" y="${cy + 1}" text-anchor="middle" style="font-weight:900;font-size:13px;fill:url(#brand);letter-spacing:1px">MAIN</text>` +
       `<text x="${cx}" y="${cy + 15}" class="hs" text-anchor="middle" style="font-size:10px">${xml(shortModel(info.model))}</text></g>`,
   )
-  const rank = (a: SubAgent) => (stuck.has(a.id) ? 0 : a.status === 'running' ? 1 : a.status === 'failed' ? 2 : 3)
-  const labelled = new Set(
-    rows
-      .map((r, i) => ({ i, k: rank(r.agent) }))
-      .sort((p, q) => p.k - q.k || p.i - q.i)
-      .slice(0, ORBIT_CROWD)
-      .map(p => p.i),
-  )
   rows.forEach((r, i) => {
     const a = r.agent
     const { x, y } = pos[i]!
@@ -2170,17 +2165,13 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
       `<circle class="dot${live && isStuck ? ' pulse-fast' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${size}" fill="${hollow ? '#FFFFFF' : grad('n', hue)}" stroke="${hue}" stroke-width="2"/>`,
     )
     // The helper's own icon inside its sphere.
-    parts.push(`<text x="${x.toFixed(1)}" y="${(y + size * 0.36).toFixed(1)}" text-anchor="middle" style="font-size:${(size * 1.05).toFixed(1)}px">${agentIcon(a.type)}</text>`)
+    parts.push(
+      crowded
+        ? `<text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" class="chip" style="font-size:10px;font-weight:900;fill:${H.text};paint-order:stroke;stroke:#FFFFFF;stroke-width:2.5px">${i + 1}</text>`
+        : `<text x="${x.toFixed(1)}" y="${(y + size * 0.36).toFixed(1)}" text-anchor="middle" style="font-size:${(size * 1.05).toFixed(1)}px">${agentIcon(a.type)}</text>`,
+    )
     // A small badge on finished helpers: ✓ done, ✗ failed.
-    const count = (a as OrbitAgent).count
-    if (count) {
-      const bx = x + size * 0.8
-      const by = y - size * 0.8
-      parts.push(
-        `<circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="7.5" fill="${H.green}" stroke="#FFFFFF" stroke-width="1.5"/>` +
-          `<text x="${bx.toFixed(1)}" y="${(by + 3).toFixed(1)}" text-anchor="middle" class="chip" style="font-size:8.5px;font-weight:900;fill:#FFFFFF">${count}</text>`,
-      )
-    } else if (a.status === 'done' || a.status === 'failed') {
+    if (a.status === 'done' || a.status === 'failed') {
       const bx = x + size * 0.75
       const by = y - size * 0.75
       const bh = a.status === 'done' ? H.green : H.red
@@ -2206,12 +2197,6 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     const doing = live ? a.steps.at(-1) : undefined
     const mark = a.status === 'done' ? ' ✓' : isStuck ? ' ⚠' : a.status === 'failed' ? ' ✗' : ''
     if (crowded) {
-      if (labelled.has(i)) {
-        const name = `${clip(a.type, Math.min(nameMax, fit(7.4) - 4))}${count ? ` ×${count}` : ''}${count ? '' : mark}`
-        const second = doing ? `▸ ${stepText(doing)}` : [count ? '' : a.model, cost > 0 ? usd(cost) : '', plural(a.stepCount ?? 0, 'step')].filter(Boolean).join(' · ')
-        parts.push(`<text x="${lx.toFixed(1)}" y="${(y - 2).toFixed(1)}" class="ht tag" text-anchor="${anchor}" style="font-size:11.5px;font-weight:600${isStuck ? `;fill:${H.red}` : ''}">${xml(name)}</text>`)
-        parts.push(`<text x="${lx.toFixed(1)}" y="${(y + 10).toFixed(1)}" class="hs" text-anchor="${anchor}" style="font-size:10px;${doing ? `font-weight:600;fill:${hue}` : ''}">${xml(clip(second, fit(5.4)))}</text>`)
-      }
       parts.push('</g></g>')
       return
     }
@@ -2224,11 +2209,7 @@ const orbitBody = (info: MainInfo, list: SubAgent[], now: number, cx: number, cy
     )
     parts.push('</g></g>')
   })
-  if (crowded) {
-    const c = counts(list)
-    const unlabelled = rows.length - labelled.size
-    parts.push(`<text x="${cx}" y="${cy + r2 + 13}" class="hs" text-anchor="middle" style="font-size:10.5px">${xml(`${plural(list.length, 'helper')}: ${c.running} working · ${c.finished} finished${unlabelled > 0 ? ` · ${unlabelled} unlabelled` : ''}`)}</text>`)
-  } else if (all.length > rows.length) parts.push(`<text x="${cx}" y="${cy + r2 + 20}" class="hs" text-anchor="middle">+${all.length - rows.length} more</text>`)
+  if (!crowded && all.length > rows.length) parts.push(`<text x="${cx}" y="${cy + r2 + 20}" class="hs" text-anchor="middle">+${all.length - rows.length} more</text>`)
   if (rows.length === 0) parts.push(`<text x="${cx}" y="${cy + 52}" class="hs" text-anchor="middle" style="font-size:12px">no helpers</text>`)
   return parts.join('')
 }
@@ -2358,7 +2339,8 @@ export const bridgeCard = (info: MainInfo, list: SubAgent[], feed: ActivityItem[
   const gauges = gaugeValues(info)
     .map((g, i) => ringGauge(362, top + 26 + i * 68, 18, g.value, g.label, g.hue))
     .join('')
-  const sparkTop = top + midH + 4
+  const legend = list.length > ORBIT_CROWD ? orbitLegend(list, now, 20, top + midH + 2, W - 40) : undefined
+  const sparkTop = top + midH + 4 + (legend ? legend.height + 6 : 0)
   const spark = sparkBody(feed, info.isWorking === true, 20, sparkTop, W - 40, 34, now)
   const feedTop = sparkTop + 44
   const divider = `<line x1="20" y1="${feedTop - 4}" x2="${W - 20}" y2="${feedTop - 4}" stroke="${H.line}"/>`
@@ -2368,7 +2350,7 @@ export const bridgeCard = (info: MainInfo, list: SubAgent[], feed: ActivityItem[
     `${stripAlt(info, list, budget, now)} ${agentsAlt(info, list)} ${gaugeAlt(info)} ${spark.alt} Recent: ${f.items.map(s => `${s.agent} ${stepText(s)}`).join('; ') || 'none yet'}.`,
     3000,
   )
-  return { source: card(W, Hh, head.parts + orbit + gauges + spark.parts + divider + f.parts, head.isStuck ? H.red : H.line, { live: info.isWorking === true, aurora: head.height }), alt }
+  return { source: card(W, Hh, head.parts + orbit + (legend?.parts ?? '') + gauges + spark.parts + divider + f.parts, head.isStuck ? H.red : H.line, { live: info.isWorking === true, aurora: head.height }), alt }
 }
 
 /** Pace: steps over this prompt's time as a glowing area chart that draws itself in. */
@@ -3149,15 +3131,15 @@ let lastCtx = 0
 // ---------------------------------------------------------------------------
 // Helper model guard: the rules' helper models, kept before a helper starts.
 
-let modelGuardOn = true
+let modelGuardOn = false
 
 /**
  * The model a helper should run on when the one it asked for is clear waste,
  * or undefined to leave the master's pick alone: reading never needs Opus or
  * Fable (Explore drops to Haiku), code is never written on Haiku (builder and
- * general-purpose step up to Sonnet), and Fable is only for when the user asks
- * (it drops to Opus; /muka models off lets it through). The checker and forks
- * are left alone, and so is a helper that names no model.
+ * general-purpose step up to Sonnet). Off unless /muka models on: by default
+ * every pick stands, Fable included. The checker and forks are left alone, and
+ * so is a helper that names no model.
  */
 export const guardModel = (type: string, model: string | undefined): 'haiku' | 'sonnet' | 'opus' | undefined => {
   if (!model || type === 'fork' || type === 'checker') return undefined
@@ -3165,7 +3147,7 @@ export const guardModel = (type: string, model: string | undefined): 'haiku' | '
   if (!f) return undefined
   if (type === 'Explore') return f === 'opus' || f === 'fable' ? 'haiku' : undefined
   if ((type === 'builder' || type === 'general-purpose') && f === 'haiku') return 'sonnet'
-  return f === 'fable' ? 'opus' : undefined
+  return undefined
 }
 
 /** Helper types that only read or review: they never start helpers of their own. */
@@ -3182,25 +3164,12 @@ export const levelOf = (list: SubAgent[], parentId: string | undefined): number 
   return level
 }
 
-/** Why a spawn breaks the sub-master limits (deeper than two levels, a fourth helper at once under one agent), or undefined. */
-export const spawnLimit = (list: SubAgent[], parentId: string | undefined): string | undefined => {
-  if (levelOf(list, parentId) > 2) {
-    return 'Muka: nesting limit. Agents go two levels deep at most (master, helper, sub-helper): a sub-helper does its piece itself. Do this part yourself.'
-  }
-  if (parentId !== undefined && list.filter(a => a.parentId === parentId && a.status === 'running').length >= 3) {
-    return 'Muka: at most 3 helpers run at once under one agent. Wait for one to finish, or do this part yourself.'
-  }
-  return undefined
-}
-
 /** The short version of the rules a helper gets with its brief, so it can act as a sub-master. */
 export const helperBrief = (level: number): string =>
   [
-    `Muka (the user's coordination rules), for this helper at level ${level} of 2:`,
-    level < 2
-      ? '- If your piece splits into independent parts with their own files (an M or L piece), you may run it as a sub-master: plan it in a few lines, start up to 3 helpers at once (the Agent tool), fit and test their work, then report up. Do an S piece yourself.'
-      : '- You are at the deepest level: do your piece yourself and start no helpers.',
-    "- Helpers' model and effort: searching or reading: haiku, low; routine code: sonnet, medium; tricky bugs or wide changes: sonnet, high; hard reasoning the result depends on: opus, high. Start low; step up one level only after a real shortfall; never haiku for code.",
+    `Muka (the user's coordination rules), for this helper (level ${level}; the master is 0):`,
+    '- You are a sub-master: if your piece splits into independent parts with their own files (an M or L piece), plan it in a few lines, start helpers of your own (the Agent tool), fit and test their work, then report up. Your helpers may do the same. Do an S piece yourself.',
+    "- For each helper you start, set its model (haiku, sonnet, opus or fable) and effort (low to max) by what its part needs: haiku/low for reading and lookups, sonnet/medium for routine code, sonnet or opus/high for tricky work, opus or fable/high-max for hard reasoning. Pay for strength only where it changes the result.",
     '- Briefs down are short (goal, files, done when). Your report is at most 150 words: Changed / Tested / Open issues. Never ask the user; report a question up.',
     '- The same error twice: change the approach. Keep tool output small (Grep, line ranges, trimmed logs).',
   ].join('\n')
@@ -3539,8 +3508,8 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     await $.store.set('models', want)
     return {
       text: want
-        ? 'Muka model guard on: the master picks the model and effort of every helper; Muka only stops clear waste: Explore never on Opus or Fable, code never written on Haiku, Fable only with the guard off. Marked ⤵ in the Orbit.'
-        : 'Muka model guard off: helpers run on the model they ask for.',
+        ? 'Muka model guard on: every pick stands except clear waste: Explore never on Opus or Fable (Haiku instead), code never written on Haiku (Sonnet instead). Marked ⤵ in the Orbit. Off by default.'
+        : 'Muka model guard off: every helper runs on the model and effort it was given, Fable included.',
     }
   }
   if (words[0] === 'nudge' || words[0] === 'nudges') {
@@ -3626,7 +3595,7 @@ export const register: Register = on => {
     pingsOn = (await $.store.get('pings')) !== false
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
-    modelGuardOn = (await $.store.get('models')) !== false
+    modelGuardOn = (await $.store.get('models')) === true
     largeSent = false
     Object.assign(wasteState, newWasteState())
     const storedBudget = await $.store.get('budget').catch(() => undefined)
@@ -3696,13 +3665,8 @@ ${MUKA_LARGE}`] })
     let call = e
     try {
       const list = await read($, agents)
-      // The sub-master limits, while the rules are on.
+      // While the rules are on, a helper gets the short rules with its brief.
       if (isSmart) {
-        const limit = spawnLimit(list, e.parentAgentId)
-        if (limit) {
-          await addNotice($, 'waste', agentLabel(list, e.parentAgentId), `a ${clean(e.subagentType) || 'helper'} spawn was refused: ${limit.replace(/^Muka: /, '')}`)
-          return { deny: limit }
-        }
         // A helper that writes code gets the short rules, so it can act as a sub-master.
         if (!READERS.has(e.subagentType) && e.subagentType !== 'fork') {
           call = { ...call, prompt: `${e.prompt}

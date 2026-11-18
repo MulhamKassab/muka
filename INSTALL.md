@@ -35,4 +35,4 @@ The person pasted the short prompt from the README. Do these steps in order and 
 | `/muka report` | Efficiency over the last week, with suggestions |
 | `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
 | `/muka nudges on` / `/muka nudges off` | Waste nudges to the agent (on by default) |
-| `/muka models on` / `/muka models off` | The helper model guard (on by default) |
+| `/muka models on` / `/muka models off` | The helper model guard (off by default) |
