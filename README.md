@@ -136,3 +136,7 @@ Muka runs inside Claude Code as a plugin. Everything it does:
 - **Notifications:** sounds, desktop notifications and phone pushes go through Claude Code's own notification features (`/muka ping off` stops them).
 
 Is it cheaper? Unproven yet. `/muka report` measures spend by model, helper and task size from your own prompts; give it a week, and compare a week with `/muka smart off`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
