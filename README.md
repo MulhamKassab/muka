@@ -86,6 +86,7 @@ Muka does more than show the agents: it keeps them efficient.
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
 - **Settings** merged into `~/.claude/settings.json`: Haiku for helpers that name no model, Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
 - **[Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance)**, Google Chrome's plugin of up-to-date web best practices (HTML, CSS, browser JavaScript, accessibility, performance): its marketplace and plugin are added to the settings, and the install prompt installs it.
+- **[REA, Reverse Engineer Anything](https://github.com/morluto/rea)**: tools for understanding how an app or feature works without its source code (native binaries, JavaScript and Electron apps, .NET assemblies, websites), with the evidence behind each finding. Its marketplace and plugin are added to the settings, and the install prompt installs it. Native-binary analysis can use Hopper, Ghidra, IDA or Kuna if you have one; JavaScript and web analysis needs none.
 
 Everything it replaces is copied first to `~/.claude/backups/muka-setup-<time>/`; `/muka setup undo` puts it back. Files it added new stay in place. If `settings.json` can't be read, setup changes nothing.
 
