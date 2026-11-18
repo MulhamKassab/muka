@@ -12,12 +12,12 @@ The person pasted the short prompt from the README. Do these steps in order and 
    - If a marketplace named `muka` is listed (an update): `claude plugin marketplace update muka`, then `claude plugin update muka@muka`.
    - Otherwise (a first install): `claude plugin marketplace add <home>/muka`, then `claude plugin install muka@muka`.
    - **Modern Web Guidance** (Google Chrome's web best-practice guides, part of Muka): if `claude plugin marketplace list` has no `googlechrome`, run `claude plugin marketplace add GoogleChrome/modern-web-guidance`; then, if `claude plugin list` has no `modern-web-guidance@googlechrome`, run `claude plugin install modern-web-guidance@googlechrome`. On an update, run `claude plugin update modern-web-guidance@googlechrome` instead.
-   - **REA, Reverse Engineer Anything** (part of Muka): if `claude plugin marketplace list` has no `rea`, run `claude plugin marketplace add morluto/rea`; then, if `claude plugin list` has no `rea@rea`, run `claude plugin install rea@rea`. On an update, run `claude plugin update rea@rea` instead. It needs Node.js 24.22.1 or newer (or 22.23.4+ on Node 22): if `node --version` is older, the install fails with "Could not download rea-agents"; tell the person to update Node.js from https://nodejs.org and ask again. On Windows the plugin install can also give up after about 5 minutes while unpacking REA's 10,000+ files (same message). Then tell the person to run REA's own setup themselves in a terminal, `npx rea-agents setup`, and pick Claude Code: it registers the same tools with no time limit.
-4. **Check.** Run `claude plugin list` and confirm `muka@muka`, `modern-web-guidance@googlechrome` and `rea@rea` are enabled. If another copy named `muka` is also enabled (for example `muka@local-mods`, a development copy), say so: two copies would both load.
+4. **Check.** Run `claude plugin list` and confirm `muka@muka` and `modern-web-guidance@googlechrome` are enabled. If another copy named `muka` is also enabled (for example `muka@local-mods`, a development copy), say so: two copies would both load.
 5. **Hand over.** Claude can't type slash commands, so tell the person to type these, one at a time:
    - `/reload-plugins`: loads Muka in this chat (a new chat loads it anyway).
    - `/muka setup` (first install only): installs the helper agents, the status line and the settings. Anything it replaces is backed up first; `/muka setup undo` puts it back.
    - `/muka`: shows what is on.
+   - `/muka rea setup` (optional): sets up REA, Reverse Engineer Anything, for Claude Code in the background (it needs Node.js 24.22.1 or newer, or 22.23.4+). A note says when it is done; then start a new chat.
 
 ## Commands, for the person
 
@@ -33,5 +33,6 @@ The person pasted the short prompt from the README. Do these steps in order and 
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
 | `/muka recap` | Today's finished prompts |
 | `/muka report` | Efficiency over the last week, with suggestions |
+| `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
 | `/muka nudges on` / `/muka nudges off` | Waste nudges to the agent (on by default) |
 | `/muka models on` / `/muka models off` | The helper model guard (on by default) |

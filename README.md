@@ -51,6 +51,7 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka report` / `/muka report 14` | Efficiency over the last 7 (or up to 14) days, with suggestions |
 | `/muka nudges on` / `/muka nudges off` | Tell the agent about waste as it happens (on by default) |
 | `/muka models on` / `/muka models off` | Keep helpers on the rules' models (on by default) |
+| `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
 
 `/orbit`, `/helm` and `/savvy` are old names for `/muka`.
 
@@ -86,7 +87,7 @@ Muka does more than show the agents: it keeps them efficient.
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
 - **Settings** merged into `~/.claude/settings.json`: Haiku for helpers that name no model, Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
 - **[Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance)**, Google Chrome's plugin of up-to-date web best practices (HTML, CSS, browser JavaScript, accessibility, performance): its marketplace and plugin are added to the settings, and the install prompt installs it.
-- **[REA, Reverse Engineer Anything](https://github.com/morluto/rea)**: tools for understanding how an app or feature works without its source code (native binaries, JavaScript and Electron apps, .NET assemblies, websites), with the evidence behind each finding. Its marketplace and plugin are added to the settings, and the install prompt installs it. Native-binary analysis can use Hopper, Ghidra, IDA or Kuna if you have one; JavaScript and web analysis needs none.
+- **[REA, Reverse Engineer Anything](https://github.com/morluto/rea)**: tools for understanding how an app or feature works without its source code (native binaries, JavaScript and Electron apps, .NET assemblies, websites), with the evidence behind each finding. `/muka rea setup` installs or updates it for Claude Code in the background (REA's own setup, `npx rea-agents setup --client claude_code --yes`; a note says when it is done), `/muka rea` shows whether it is set up, and `/muka rea doctor` runs its checks. It needs Node.js 24.22.1 or newer (or 22.23.4+). Native-binary analysis can use Hopper, Ghidra, IDA or Kuna if you have one; JavaScript and web analysis needs none.
 
 Everything it replaces is copied first to `~/.claude/backups/muka-setup-<time>/`; `/muka setup undo` puts it back. Files it added new stay in place. If `settings.json` can't be read, setup changes nothing.
 

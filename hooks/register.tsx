@@ -3168,6 +3168,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Waste nudges: ${nudgesOn ? 'on' : 'off'} (/muka nudges on, /muka nudges off)`,
     `- Model guard: ${modelGuardOn ? 'on' : 'off'} (/muka models on, /muka models off)`,
     '- Report: /muka report (the last 7 days: spend by model, helper and size, waste caught, suggestions)',
+    '- REA (Reverse Engineer Anything): /muka rea (status), /muka rea setup (install or update), /muka rea doctor',
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
     '- Both panel and rules at once: /muka all on, /muka all off',
     '- Setup: /muka setup installs the helper agents, the status line and the settings; /muka setup undo puts back what it replaced',
@@ -3178,6 +3179,88 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
 const homeDir = async ($: EngineInterface): Promise<string | undefined> => {
   const v = (await $.env.get('USERPROFILE').catch(() => undefined)) || (await $.env.get('HOME').catch(() => undefined))
   return v ? v.replace(/\\/g, '/').replace(/\/+$/, '') : undefined
+}
+
+// ---------------------------------------------------------------------------
+// REA (Reverse Engineer Anything), run by /muka rea. Its setup runs in the
+// background (a hook must answer in seconds; the setup takes minutes), and a
+// toast says how it went.
+
+/** The last REA run: what, when, whether it is still going, and how it ended. */
+type ReaRun = { action: 'setup' | 'doctor'; at: number; running: boolean; ok?: boolean; tail?: string }
+let reaRun: ReaRun | undefined
+
+/** The command line for npx: through the shell on Windows (npx is a .cmd there), straight elsewhere. */
+export const reaArgv = (comspec: string | undefined, args: readonly string[]): string[] =>
+  comspec ? [comspec, '/d', '/s', '/c', ['npx', '-y', ...args].join(' ')] : ['npx', '-y', ...args]
+
+/** What REA's commands print, without colour codes or box-drawing, last lines first kept. */
+export const reaTail = (out: string, lines = 12): string =>
+  out
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '')
+    .split(/\r?\n/)
+    .map(l => l.replace(/^[\s│◇◆┌└!]+/, '').trim())
+    .filter(l => l && !/^npm warn/i.test(l))
+    .slice(-lines)
+    .join('\n')
+
+/** Starts an REA command in the background; the toast at its end says how it went. */
+const startRea = async ($: EngineInterface, action: ReaRun['action']): Promise<string> => {
+  if (reaRun?.running) return `REA ${reaRun.action} is already running (started ${clock(reaRun.at)}). Muka shows a note when it ends.`
+  const comspec = await $.env.get('ComSpec').catch(() => undefined)
+  const args = action === 'setup' ? ['rea-agents@latest', 'setup', '--client', 'claude_code', '--yes'] : ['rea-agents@latest', 'doctor', '--client', 'claude_code', '--skill']
+  const run: ReaRun = { action, at: Date.now(), running: true }
+  reaRun = run
+  void (async () => {
+    let out = ''
+    try {
+      const child = $.process.spawn({ argv: reaArgv(comspec, args) })
+      for await (const piece of child) out += piece.text
+      const end = await child.result
+      run.ok = end.code === 0
+    } catch (err) {
+      run.ok = false
+      out += `\n${String(err)}`
+    }
+    run.running = false
+    run.tail = reaTail(out)
+    const head = action === 'setup'
+      ? run.ok ? 'REA is set up for Claude Code: start a new chat to load it.' : 'REA setup failed: /muka rea shows what it printed.'
+      : run.ok ? 'REA doctor: all checks passed.' : 'REA doctor found problems: /muka rea shows them.'
+    await Promise.resolve($.ui.toast(head)).catch(() => undefined)
+  })()
+  return action === 'setup'
+    ? 'Setting up REA for Claude Code in the background (npx rea-agents setup --client claude_code --yes; the first run downloads about 40 MB and can take a few minutes). A note pops up when it ends; /muka rea shows the result. Then start a new chat.'
+    : 'Running REA doctor in the background. A note pops up when it ends; /muka rea shows the result.'
+}
+
+/** /muka rea: whether REA is registered with Claude Code, its skill, and the last setup or doctor run. */
+const reaStatus = async ($: EngineInterface): Promise<string> => {
+  const home = await homeDir($)
+  let registered: boolean | undefined
+  let skill: boolean | undefined
+  if (home) {
+    try {
+      const cfg = JSON.parse(String(await $.fs.read(`${home}/.claude.json`))) as { mcpServers?: Record<string, unknown> }
+      registered = !!cfg.mcpServers && 'rea' in cfg.mcpServers
+    } catch {
+      registered = undefined
+    }
+    skill = await $.fs.exists(`${home}/.claude/skills/reverse-engineer-anything`).catch(() => undefined)
+  }
+  const yn = (v: boolean | undefined) => (v === undefined ? 'unknown' : v ? 'yes' : 'no')
+  const lines = [
+    'REA (Reverse Engineer Anything)',
+    `- Tools registered with Claude Code: ${yn(registered)}`,
+    `- Skill installed: ${yn(skill)}`,
+  ]
+  if (reaRun) {
+    lines.push(`- Last ${reaRun.action}: ${reaRun.running ? 'still running' : reaRun.ok ? 'done' : 'failed'} (started ${clock(reaRun.at)})`)
+    if (!reaRun.running && reaRun.tail) lines.push('', 'What it printed last:', reaRun.tail)
+  }
+  lines.push('', 'Commands: /muka rea setup (install or update, for Claude Code), /muka rea doctor (the checks REA runs on itself). After a setup, start a new chat to load REA.')
+  if (registered === false) lines.push('Not set up yet: run /muka rea setup.')
+  return lines.join('\n')
 }
 
 const SETUP_LAST = 'muka-setup-last.json'
@@ -3358,6 +3441,11 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     return { text: recapText(entries, label) }
   }
   if (words[0] === 'smart') return setSmart($, words[1] !== 'off')
+  if (words[0] === 'rea') {
+    if (words[1] === 'setup' || words[1] === 'install' || words[1] === 'update') return { text: await startRea($, 'setup') }
+    if (words[1] === 'doctor' || words[1] === 'check') return { text: await startRea($, 'doctor') }
+    return { text: await reaStatus($) }
+  }
   if (words[0] === 'report') {
     const days = Math.min(LOG_DAYS_KEPT, Math.max(1, Number(words[1]) || 7))
     return { text: efficiencyReport(await readLogDays($, days), days) }

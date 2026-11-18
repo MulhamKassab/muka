@@ -17,16 +17,9 @@
         "source": "github",
         "repo": "GoogleChrome/modern-web-guidance"
       }
-    },
-    "rea": {
-      "source": {
-        "source": "github",
-        "repo": "morluto/rea"
-      }
     }
   },
   "enabledPlugins": {
-    "modern-web-guidance@googlechrome": true,
-    "rea@rea": true
+    "modern-web-guidance@googlechrome": true
   }
 }
