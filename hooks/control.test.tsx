@@ -129,7 +129,7 @@ test('agentCard is well-formed SVG with the helper name, model, steps and sub-he
   expect(c.source).toContain('HELPERS IT STARTED')
   expect(c.source).toContain('>Explore<')
   // The failed step is a red dot.
-  expect(c.source).toMatch(/r="5" fill="#DC2626"/)
+  expect(c.source).toMatch(/r="5" fill="#ff5c6c"/)
   // No double quote inside an attribute value, and no bare ampersand.
   expect(c.source).not.toMatch(/style="[^"<>]*"[A-Za-z]/)
   expect(c.source).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;|#)/)

@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { actualSize, contextNudge, efficiencyReport, guardModel, helperBrief, levelOf, orbitLegend, looksLarge, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
+import { actualSize, contextNudge, efficiencyReport, guardModel, helperBrief, levelOf, agentConsole, looksLarge, modelTag, newWasteState, sizeIn, sizingNote, WASTE_BIG, wasteCheck } from './register'
 import type { LogEntry, SubAgent } from '../types'
 
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
@@ -217,10 +217,21 @@ test('a helper gets the brief with its prompt, and helpers may start helpers at 
   expect(prompts[3]).toMatch(/level 3/)
 })
 
-test('a crowded orbit lists every helper in a numbered legend', () => {
+test('the agents console lists every helper, numbered as its blip', () => {
   const many = [...[1, 2, 3, 4, 5, 6, 7].map(n => sub({ id: `d${n}`, status: 'done' })), sub({ id: 'w1', steps: [{ tool: 'Bash', label: 'Bash: npm test', at: 0 }] }), sub({ id: 'k1', parentId: 'w1' })]
-  const legend = orbitLegend(many, 1000, 20, 0, 360)
-  expect(legend.parts).toMatch(/9 HELPERS · 2 WORKING · 7 FINISHED/)
-  for (let n = 1; n <= 9; n++) expect(legend.parts).toContain(`>${n}</text>`)
-  expect(legend.parts).toMatch(/▸ Bash: npm test/)
+  const con = agentConsole(many, 1000, 20, 0, 360)
+  expect(con.parts).toMatch(/AGENTS · 2 ACTIVE · 7 DONE/)
+  for (let n = 1; n <= 9; n++) expect(con.parts).toContain(`>${n}</text>`)
+  expect(con.parts).toMatch(/▸<\/tspan> Bash: npm test/)
+  // Live rows get a cyan outline: two working helpers, two outlines.
+  expect(con.parts.match(/stroke="#3fd8ff" stroke-opacity="\.35"/g)).toHaveLength(2)
+})
+
+test('model tags: the model family and, when known, the effort', () => {
+  expect(modelTag('opus 5.5', 'high')).toBe('OPUS·HI')
+  expect(modelTag('haiku 5.5', 'low')).toBe('HAIKU·LO')
+  expect(modelTag('sonnet 5.5', 'medium')).toBe('SONNET·MD')
+  expect(modelTag('claude-fable-5-2', 'max')).toBe('FABLE·MX')
+  expect(modelTag('sonnet 5.5')).toBe('SONNET')
+  expect(modelTag('sonnet 5.5', 'weird')).toBe('SONNET')
 })

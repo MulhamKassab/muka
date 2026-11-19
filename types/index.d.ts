@@ -38,6 +38,8 @@ export type SubAgent = {
   /** Steps that ran (denied ones are not counted). */
   stepCount: number
   usage?: Usage
+  /** The effort it was started with (low, medium, high, xhigh, max), when the spawn said. */
+  effort?: string
 }
 
 export type MainInfo = {

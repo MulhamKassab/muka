@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { bridgeStrip, budgetState, nextVerify, orbitChart, planBudget, pulseLine, spendBar, verifyChip, verifyEffect } from './register'
+import { bridgeCard, bridgeStrip, budgetState, nextVerify, orbitChart, planBudget, pulseLine, spendBar, verifyChip, verifyEffect } from './register'
 import type { SubAgent } from '../types'
 
 const PANE = {
@@ -74,6 +74,58 @@ test('the Bridge strip, Orbit and spend bar are well-formed cards', () => {
   expect(orbit.source).toMatch(/<title>builder · sonnet 5\.5 · running/)
   const spend = spendBar({ sonnet: 0.7, haiku: 0.05 }, 3)
   expect(spend.alt).toBe('Spend by model: sonnet $0.70, haiku $0.05; budget $3.00.')
+})
+
+test('the Bridge is a HUD card: radar, gauges, agents console, all strict XML', () => {
+  const info = {
+    model: 'claude-opus-5-5',
+    isWorking: true,
+    turnStartedAt: 0,
+    costUsd: 1.84,
+    ctxPercent: 36,
+    verify: 'unverified' as const,
+    plan: [
+      { content: 'Scout', status: 'completed' as const },
+      { content: 'Build', status: 'in_progress' as const },
+      { content: 'Review', status: 'pending' as const },
+    ],
+  }
+  const list = [
+    agent({ id: 'b1', model: 'opus 5.5', effort: 'high', steps: [{ tool: 'Edit', label: 'Edit mailer.ts', at: 240_000 }] }),
+    agent({ id: 'e1', type: 'Explore', model: 'haiku 5.5', effort: 'low', parentId: 'b1', status: 'done', endedAt: 200_000, stepCount: 28 }),
+    agent({ id: 'r1', type: 'reviewer', status: 'failed', endedAt: 230_000 }),
+  ]
+  const b = bridgeCard(info, list, [{ at: 240_000, agent: 'builder', agentId: 'b1', tool: 'Edit', label: 'Edit mailer.ts' }], undefined, 252_000)
+  expect(b.source).toMatch(/^<svg [^>]*viewBox="0 0 400 \d+">[\s\S]*<\/svg>$/)
+  // The dark glass: a gradient panel, scanlines, a green hairline.
+  expect(b.source).toContain('fill="url(#bg)"')
+  expect(b.source).toContain('fill="url(#scan)"')
+  expect(b.source).toContain('>MUKA<')
+  expect(b.source).toContain('LIVE</text>')
+  expect(b.source).toContain('>⚠ UNVERIFIED<')
+  expect(b.source).toContain('&gt; builder :: Edit mailer.ts<tspan class="blink">_</tspan>')
+  expect(b.source).toContain('PLAN 1/3 · NOW: BUILD')
+  // The radar turns its sweep; Main sits at the centre.
+  expect(b.source).toContain('<g class="radar"')
+  expect(b.source).toContain('>MAIN<')
+  // Gauges as label, big number and bar.
+  expect(b.source).toContain('>CONTEXT<')
+  expect(b.source).toContain('>36%<')
+  // The console: a row per helper with its model·effort tag and how it stands.
+  expect(b.source).toContain('AGENTS · 1 ACTIVE · 1 DONE · 1 FAILED')
+  expect(b.source).toContain('>OPUS·HI<')
+  expect(b.source).toContain('>HAIKU·LO<')
+  expect(b.source).toContain('>SONNET<')
+  expect(b.source).toContain('✓ done · 28 steps')
+  expect(b.source).toContain('✗ failed')
+  expect(b.source).toContain('>builder<')
+  // Strict XML: the font list (with its double quotes) lives only in the style block.
+  expect(b.source).not.toMatch(/style="[^"<>]*"Segoe/)
+  expect(b.source).not.toMatch(/style="[^"<>]*"JetBrains/)
+  expect(b.source).not.toMatch(/="[^"<>]*"[A-Za-z]/)
+  expect(b.source).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;|#)/)
+  expect(b.source).toContain('JetBrains Mono')
+  expect(b.source.replace(/<style>[\s\S]*?<\/style>/, '')).not.toContain('JetBrains')
 })
 
 const engine = (on: On) => {
@@ -162,11 +214,11 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   const alt = String(pictures[0]!.props.alt)
   expect(alt).toMatch(/^Muka\. .*Agent tree. .*Usage limit .*Recent: .*builder Read/)
   const source = String(pictures[0]!.props.source)
-  // Drawn straight on the panel, which sizes it: laid out 400 wide, allowed to grow to 520, no frame of its own.
+  // Sized by the panel: laid out 400 wide, allowed to grow to 520, in its own dark HUD frame.
   expect(pictures[0]!.props.width).toBeUndefined()
   expect(pictures[0]!.props.isInteractive).toBeUndefined()
   expect(source).toMatch(/^<svg [^>]*width="520" [^>]*viewBox="0 0 400 /)
-  expect(source).not.toContain('rx="16"')
+  expect(source).toMatch(/<rect x="\.5" y="\.5" width="399" height="\d+" rx="14" fill="url\(#bg\)"\/>/)
   expect(source).toContain('>MAIN<')
   expect(source).toContain('>CONTEXT<')
   // The views are one row of icons, the open one primary; steering lives on the Bridge, so no Steer icon.
