@@ -28,6 +28,7 @@ const engine = (on: On, files: Map<string, string>, store: Record<string, unknow
     const p = norm(raw)
     if (p.endsWith('/extras/settings.json')) return JSON.stringify({ env: { MUKA_TEST: '1' }, model: 'sonnet', askUserQuestionTimeout: '60s' })
     if (p.endsWith('/extras/statusline.js')) return '// status line'
+    if (p.endsWith('/extras/skills/verify/SKILL.md')) return '---\nname: verify\n---\nprove it ran'
     const m = p.match(/\/extras\/agents\/(.+\.md)$/)
     return m ? `---\nname: ${m[1]!.replace('.md', '')}\n---\nnew` : undefined
   }
@@ -61,30 +62,33 @@ test('settings merge: env key by key, Muka keys replaced, plugins and marketplac
   })
 })
 
-test('/muka setup installs the agents, status line and settings, backs up what it replaces, and undo puts it back', async ($, on) => {
+test('/muka setup installs the agents, the verify skill, status line and settings, backs up what it replaces, and undo puts it back', async ($, on) => {
   const files = new Map<string, string>([
     [`${HOME}/settings.json`, JSON.stringify({ model: 'opus', env: { FOO: '1' }, enabledPlugins: { x: true } })],
     [`${HOME}/agents/builder.md`, 'my old builder'],
+    [`${HOME}/skills/verify/SKILL.md`, 'my old verify skill'],
   ])
   engine(on, files)
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   const r = await $.command.run({ command: 'muka', args: 'setup' } as never)
-  expect(r.text).toMatch(/^Muka setup done:\n- agent: builder\n- agent: Explore\n- status line script\n- settings: env, model, askUserQuestionTimeout/)
+  expect(r.text).toMatch(/^Muka setup done:\n- agent: builder\n- agent: Explore\n- skill: verify\n- status line script\n- settings: env, model, askUserQuestionTimeout/)
   expect(files.get(`${HOME}/agents/builder.md`)).toMatch(/name: builder\n---\nnew/)
+  expect(files.get(`${HOME}/skills/verify/SKILL.md`)).toBe('---\nname: verify\n---\nprove it ran')
   expect(files.get(`${HOME}/statusline.js`)).toBe('// status line')
   expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'sonnet', env: { FOO: '1', MUKA_TEST: '1' }, enabledPlugins: { x: true }, askUserQuestionTimeout: '60s' })
   // What it replaced is kept under backups.
   const saved = [...files.keys()].filter(k => k.startsWith(`${HOME}/backups/muka-setup-2`))
-  expect(saved.map(k => k.replace(/.*muka-setup-[^/]+\//, '')).sort()).toEqual(['agents/builder.md', 'settings.json'])
+  expect(saved.map(k => k.replace(/.*muka-setup-[^/]+\//, '')).sort()).toEqual(['agents/builder.md', 'settings.json', 'skills/verify/SKILL.md'])
 
   // Again: nothing to change.
   const again = await $.command.run({ command: 'muka', args: 'setup' } as never)
-  expect(again.text).toMatch(/agent: builder \(already up to date\)[\s\S]*settings \(already up to date\)/)
+  expect(again.text).toMatch(/agent: builder \(already up to date\)[\s\S]*skill: verify \(already up to date\)[\s\S]*settings \(already up to date\)/)
 
   // The second setup changed nothing, so undo still puts back what the first replaced.
   const undo = await $.command.run({ command: 'muka', args: 'setup undo' } as never)
-  expect(undo.text).toMatch(/^Muka setup undone\. Put back: agents\/builder\.md, \.claude\/settings\.json\./)
+  expect(undo.text).toMatch(/^Muka setup undone\. Put back: agents\/builder\.md, verify\/SKILL\.md, \.claude\/settings\.json\./)
   expect(files.get(`${HOME}/agents/builder.md`)).toBe('my old builder')
+  expect(files.get(`${HOME}/skills/verify/SKILL.md`)).toBe('my old verify skill')
 })
 
 test('/muka setup undo restores what the last setup replaced', async ($, on) => {
@@ -96,7 +100,7 @@ test('/muka setup undo restores what the last setup replaced', async ($, on) => 
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   await $.command.run({ command: 'muka', args: 'setup' } as never)
   const u = await $.command.run({ command: 'muka', args: 'setup undo' } as never)
-  expect(u.text).toMatch(/^Muka setup undone\. Put back: agents\/builder\.md, \.claude\/settings\.json\.\nLeft in place \(they were new, so there was nothing to put back\): agents\/Explore\.md, \.claude\/statusline\.js\./)
+  expect(u.text).toMatch(/^Muka setup undone\. Put back: agents\/builder\.md, \.claude\/settings\.json\.\nLeft in place \(they were new, so there was nothing to put back\): agents\/Explore\.md, verify\/SKILL\.md, \.claude\/statusline\.js\./)
   expect(files.get(`${HOME}/agents/builder.md`)).toBe('my old builder')
   expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'opus' })
   expect((await $.command.run({ command: 'muka', args: 'setup undo' } as never)).text).toMatch(/already undone/)

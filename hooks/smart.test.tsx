@@ -38,9 +38,9 @@ test('waste catchers: a re-read of an unchanged file, a retry loop, a huge resul
   expect(wasteCheck(st, call({ tool: 'Agent', args: { prompt: 'p' }, text: big }))).toEqual([])
 })
 
-test('the context nudge comes once per climb past 70%', () => {
+test('the context nudge comes once per climb past 70% (and the context rule once at 50%)', () => {
   const st = newWasteState()
-  expect(contextNudge(st, 50)).toBeUndefined()
+  expect(contextNudge(st, 50)).toMatch(/50% full\. Finish the piece in hand, then run \/compact/)
   expect(contextNudge(st, 72)).toMatch(/72% full/)
   expect(contextNudge(st, 80)).toBeUndefined()
   // Compacted, then filling again: told again.

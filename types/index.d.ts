@@ -40,6 +40,8 @@ export type SubAgent = {
   usage?: Usage
   /** The effort it was started with (low, medium, high, xhigh, max), when the spawn said. */
   effort?: string
+  /** While the models rule is on: whether its starter named a model (false: it runs on its default). */
+  picked?: boolean
 }
 
 export type MainInfo = {
@@ -180,9 +182,11 @@ export type SteerNote = {
   toLabel: string
   at: number
   deliveredAt?: number
+  /** 'muka' for a rule check's own note, passed on as written (not framed as the user's). */
+  from?: 'muka'
 }
 
-export type SavvyView = 'flow' | 'steer' | 'activity' | 'cost' | 'radius' | 'notes' | 'reflect' | 'report'
+export type SavvyView = 'flow' | 'steer' | 'activity' | 'cost' | 'radius' | 'notes' | 'reflect' | 'report' | 'rules'
 
 /** The stats recap of the main agent's last finished turn. */
 export type Recap = {

@@ -24,8 +24,187 @@ import type {
 const PANE = 'muka'
 const TITLE = 'Muka'
 
-/** The coordination rules Muka adds while smart is on (they used to live in CLAUDE.md). */
-export const MUKA_RULES = "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short.\n\n## Size every task first\n\nBefore starting, decide the size and say it in one line (for example \"Size: M\").\n\n- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.\n- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.\n- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: \"Large tasks\" below.\n- **Careful mode**: only when the user says \"careful mode\", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.\n\n## Large tasks: plan, then swarm\n\n1. **Scout.** One or two `Explore` helpers map the relevant code. Ask for locations and facts, never whole files.\n2. **Plan.** Write `PLAN.md` in the scratchpad with:\n   - a `Budget: $N` line only if the user gave a budget for this task (none by default),\n   - the phases, one short line each (they become the progress bar),\n   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,\n   - the shared interfaces between pieces, fixed before anyone builds.\n   Consult the advisor once, on this plan.\n3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see \"Sub-masters\"), at any depth.\n4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.\n5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.\n6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.\n\nKeep the team small: one or two builders is usual; more only when the pieces are truly separate.\n\n## Helpers\n\n- **Model and effort:** set both for every helper you start (the Agent tool's `model` and `effort`; this rule is the user's explicit instruction to set them). Any model is allowed (`haiku`, `sonnet`, `opus`, `fable`) at any effort (`low` to `max`): choose what gives the best result for the piece at a sensible cost. A guide, not a limit:\n  - searching, reading, listing, simple lookups: `haiku`, `low`;\n  - routine code, tests, docs, reviews: `sonnet`, `medium`;\n  - tricky bugs, changes across many files, risky migrations: `sonnet` or `opus`, `high`;\n  - hard reasoning the whole result depends on (architecture, security, a stubborn failure): `opus` or `fable`, `high` or `max`.\n  Pay for strength where it changes the result; don't spend it on work a cheaper model does just as well.\n- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.\n- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.\n- **Stop rules (at every level):**\n  - the same error twice: change the approach (the main session may consult the advisor once);\n  - a helper on one step for 5+ minutes: steer it or replace it;\n  - if the user set a budget: at 70% start wrapping up; at 100% start no new helpers, finish the piece in hand, and report what is left.\n- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.\n\n## Sub-masters\n\nEvery helper is a sub-master: it may run its piece the way the master runs the task (size it, plan it in a few lines, start its own helpers, fit and test their work, report up), and its helpers may do the same, at any depth. Each level follows these same rules, including picking any model and effort for its own helpers. To keep usage sensible:\n\n- **Split only when it pays:** an M or L piece with parts that have their own files. Do an S piece yourself.\n- **Keep each team small:** start the helpers the work needs, not more.\n- **Reports stay at 150 words at every level,** so nothing large flows back up. Helpers never ask the user; they report the question up.\n\nThe user sees every agent and sub-agent live in Muka's panel.\n\n## Verify before done\n\nNever call work done on reading alone; prove it ran.\n\n- **Run the real thing:** after the last edit, run what proves the change: the tests that cover it, the build, the linter, and for anything a person sees, the app itself (open it, click through the change, take a screenshot). End-to-end checks beat unit tests; add one when a change crosses parts.\n- **Keep the judge independent:** never edit a test, a check or its data to make it pass. A failing check is fixed in the code, or reported.\n- **No flaky green:** a flaky test is fixed or removed, never retried or skipped until it passes.\n- **Hunt your own blind spots:** for logic with many inputs, add a property test (fast-check, Hypothesis, proptest); when replacing old code, compare its output with the old version's.\n- **One reviewer, tagged findings:** on an L task the `reviewer` tags each finding **Important**, **Nit** or **Pre-existing**; fix the Important ones. If the project has a REVIEW.md, the reviewer follows it.\n- **Turn each miss into a rule:** when something slipped through, say in one line what check would have caught it, so it can be added to the project's CLAUDE.md.\n- **Say how you verified it** in the final message: what ran, and what was not checked.\n\n## Questions\n\nWhen you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait."
+// ---------------------------------------------------------------------------
+// The rule controller: the coordination rules as a registry of separately
+// switchable rules. Muka injects the ones that are on, shows them in the
+// Rules view, and checks the ones it can (`check` says how).
+
+/** One coordination rule: its id (for /muka rule <id> on|off), title, text, when it is sent, and how Muka checks it. */
+export type Rule = { id: string; title: string; text: string; when: 'always' | 'large'; check?: string }
+
+/** The line every set of rules starts with. */
+export const RULES_INTRO =
+  "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off, or one at a time with /muka rule <id> off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short."
+
+/** The coordination rules, in the order they are sent. */
+export const RULES: Rule[] = [
+  {
+    id: 'size',
+    title: 'Size every task first',
+    when: 'always',
+    check: "Main's third tool call of a prompt with no 'Size:' line brings one note asking for it.",
+    text: [
+      '## Size every task first',
+      '',
+      'Before starting, decide the size and say it in one line (for example "Size: M").',
+      '',
+      '- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.',
+      '- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.',
+      '- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: "Large tasks" below.',
+      '- **Careful mode**: only when the user says "careful mode", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.',
+    ].join('\n'),
+  },
+  {
+    id: 'large',
+    title: 'Large tasks: plan, then swarm',
+    when: 'large',
+    text: [
+      '## Large tasks: plan, then swarm',
+      '',
+      '1. **Scout.** One or two `Explore` helpers map the relevant code. Ask for locations and facts, never whole files.',
+      '2. **Plan.** Write `PLAN.md` in the scratchpad with:',
+      '   - a `Budget: $N` line only if the user gave a budget for this task (none by default),',
+      '   - the phases, one short line each (they become the progress bar),',
+      '   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,',
+      '   - the shared interfaces between pieces, fixed before anyone builds.',
+      '   Consult the advisor once, on this plan.',
+      '3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see "Sub-masters"), at any depth.',
+      '4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.',
+      '5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.',
+      '6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.',
+      '',
+      'Keep the team small: one or two builders is usual; more only when the pieces are truly separate.',
+    ].join('\n'),
+  },
+  {
+    id: 'helpers',
+    title: 'Helpers',
+    when: 'always',
+    text: [
+      '## Helpers',
+      '',
+      '- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.',
+      '- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.',
+      '- **Stop rules (at every level):** the same error twice: change the approach (see "Recover"); a helper on one step for 5+ minutes: steer it or replace it; if the user set a budget: at 70% start wrapping up, at 100% start no new helpers, finish the piece in hand and report what is left.',
+      '- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.',
+    ].join('\n'),
+  },
+  {
+    id: 'models',
+    title: 'Models',
+    when: 'always',
+    check: 'A helper started without a model is marked DEFAULT in the agents console, and its starter is told to name one.',
+    text: [
+      '## Models',
+      '',
+      "You MUST pass `model` (and `effort`) on every Agent call; the agent definition's default is only a fallback. This rule is the user's explicit instruction to set them. Any model is allowed:",
+      '',
+      '- `opus` (or `fable`), `high` or `max`: planning an L task, hard debugging, the final review;',
+      '- `sonnet`, `medium` (`high` when tricky): routine implementation, tests, docs;',
+      '- `haiku`, `low`: reading, searching and lookups.',
+      '',
+      "Pay for strength where it changes the result; don't spend it on work a cheaper model does just as well.",
+    ].join('\n'),
+  },
+  {
+    id: 'submasters',
+    title: 'Sub-masters',
+    when: 'always',
+    text: [
+      '## Sub-masters',
+      '',
+      'Every helper is a sub-master: it may run its piece the way the master runs the task (size it, plan it in a few lines, start its own helpers, fit and test their work, report up), and its helpers may do the same, at any depth, under these same rules.',
+      '',
+      '- **Split only when it pays:** an M or L piece with parts that have their own files. Do an S piece yourself.',
+      '- **Keep each team small:** start the helpers the work needs, not more.',
+      '- **Reports stay at 150 words at every level.** Helpers never ask the user; they report the question up.',
+    ].join('\n'),
+  },
+  {
+    id: 'verify',
+    title: 'Verify before done',
+    when: 'always',
+    check: 'A turn that changed files and ran no test, build, lint or app check is flagged in Alerts, and the next prompt carries a note.',
+    text: [
+      '## Verify before done',
+      '',
+      'Never call work done on reading alone; prove it ran (the `verify` skill does this). After the last edit, run the tests that cover the change, the build and the linter, and for anything a person sees, the app itself (open it, click through the change, take a screenshot). Never edit a test, a check or its data to make it pass; a flaky test is fixed or removed, never retried until green. On an L task the `reviewer` tags findings **Important**, **Nit** or **Pre-existing**; fix the Important ones. Say how you verified it in the final message: what ran, and what was not checked.',
+    ].join('\n'),
+  },
+  {
+    id: 'context',
+    title: 'Context',
+    when: 'always',
+    check: 'At 50% full Main is told to finish the piece in hand and run /compact.',
+    text: [
+      '## Context',
+      '',
+      'Keep the context lean: at about 50% full, finish the piece in hand and run /compact (say so to the user); start an unrelated task in a fresh chat (/clear); send big reading to a helper so only its conclusion comes back.',
+    ].join('\n'),
+  },
+  {
+    id: 'recover',
+    title: 'Recover',
+    when: 'always',
+    check: 'The second identical failure of a call brings the stop-patching note.',
+    text: [
+      '## Recover',
+      '',
+      'After two failed fixes of the same problem, stop patching: go back to the last good state (git restore / rewind) and try a different approach, or report the blocker.',
+    ].join('\n'),
+  },
+  {
+    id: 'questions',
+    title: 'Questions',
+    when: 'always',
+    text: [
+      '## Questions',
+      '',
+      "When you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait.",
+    ].join('\n'),
+  },
+]
+
+/** What every chat gets in place of the large-task steps, which join only a prompt that looks large. */
+export const LARGE_SUMMARY =
+  '## Large tasks\n\nFor an L task: scout with `Explore`, write PLAN.md (phases; pieces with Goal / May touch / Must not touch / Done when / Test command; the shared interfaces), one `builder` per independent piece, fit and test it yourself, then one `reviewer`. Muka adds the full steps to a prompt that looks large.'
+
+const ruleIsOn = (off: readonly string[], id: string): boolean => !off.includes(id)
+
+/** Every rule that is on, in full, after the intro. */
+export const rulesText = (off: readonly string[] = []): string =>
+  [RULES_INTRO, ...RULES.filter(r => ruleIsOn(off, r.id)).map(r => r.text)].join('\n\n')
+
+/** What a chat starts with: the rules that are on, with the large-task steps as their one-paragraph summary. */
+export const coreText = (off: readonly string[] = []): string =>
+  [RULES_INTRO, ...RULES.filter(r => ruleIsOn(off, r.id)).map(r => (r.when === 'large' ? LARGE_SUMMARY : r.text))].join('\n\n')
+
+/** The full large-task steps, or '' when that rule is off. */
+export const largeText = (off: readonly string[] = []): string =>
+  RULES.filter(r => r.when === 'large' && ruleIsOn(off, r.id))
+    .map(r => r.text)
+    .join('\n\n')
+
+/** The coordination rules Muka adds while smart is on: every rule that is on. */
+export let MUKA_RULES = rulesText()
+/** The rules every chat starts with: the ones that are on, with the large-task details summed up. */
+export let MUKA_CORE = coreText()
+/** The full large-task section of the rules ('' while that rule is off). */
+export let MUKA_LARGE = largeText()
+
+/** The rules switched off (/muka rule <id> off, the Rules view); kept in the store as 'rulesOff'. */
+let rulesOff: string[] = []
+
+/** Takes a new set of rules switched off: unknown ids are dropped, and the exported texts follow. */
+const applyRulesOff = (off: readonly unknown[]): void => {
+  rulesOff = RULES.map(r => r.id).filter(id => off.includes(id))
+  MUKA_RULES = rulesText(rulesOff)
+  MUKA_CORE = coreText(rulesOff)
+  MUKA_LARGE = largeText(rulesOff)
+}
+
+/** How often each rule's check fired this session, by rule id. */
+export const ruleHits: Record<string, number> = {}
 
 // Smart: the rules are on in every chat unless /muka smart off turned them off.
 let isSmart = true
@@ -46,7 +225,7 @@ export const GUARD_DENY = 'Muka delete guard'
 
 // Change a tag when that value's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const agents = atom({ plugin: 'muka', key: 'agents' } as const, [] as SubAgent[], { shape: 'agents-3' })
+const agents = atom({ plugin: 'muka', key: 'agents' } as const, [] as SubAgent[], { shape: 'agents-4' })
 const main = atom({ plugin: 'muka', key: 'main' } as const, {} as MainInfo, { shape: 'main-4' })
 const notices = atom({ plugin: 'muka', key: 'notices' } as const, [] as Notice[], { shape: 'notices-1' })
 const changes = atom({ plugin: 'muka', key: 'changes' } as const, [] as FileChange[], { shape: 'changes-2' })
@@ -57,7 +236,7 @@ const activity = atom({ plugin: 'muka', key: 'activity' } as const, [] as Activi
 const focus = atom({ plugin: 'muka', key: 'focus' } as const, '', { shape: 'focus-1' })
 const tick = atom({ plugin: 'muka', key: 'tick' } as const, 0, { shape: 'tick-1' })
 const feedFilter = atom({ plugin: 'muka', key: 'feedFilter' } as const, '', { shape: 'feed-filter-1' })
-const steer = atom({ plugin: 'muka', key: 'steer' } as const, [] as SteerNote[], { shape: 'steer-1' })
+const steer = atom({ plugin: 'muka', key: 'steer' } as const, [] as SteerNote[], { shape: 'steer-2' })
 const steerTo = atom({ plugin: 'muka', key: 'steerTo' } as const, 'main', { shape: 'steer-to-1' })
 
 // Whether Savvy mode (the panel) is on, and whether the delete guard is on.
@@ -2078,7 +2257,7 @@ export const agentConsole = (list: SubAgent[], now: number, x: number, y: number
           : a.status === 'failed'
             ? { t: `✗ failed · ${steps}`, hue: H.red }
             : { t: `■ stopped · ${steps}`, hue: H.amber }
-    const tip = `${a.type} · ${a.model}${a.effort ? ` · ${a.effort}` : ''} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${steps} · ${duration((a.endedAt ?? now) - a.startedAt)}${costText ? ` · ${costText}` : ''}`
+    const tip = `${a.type} · ${a.model}${a.picked === false ? ' (its default: no model named)' : ''}${a.effort ? ` · ${a.effort}` : ''} · ${a.status}${isStuck ? ' (stuck)' : ''}\n${a.description}\n${steps} · ${duration((a.endedAt ?? now) - a.startedAt)}${costText ? ` · ${costText}` : ''}`
     parts.push(`<g class="row"><title>${xml(tip)}</title>`)
     if (live) parts.push(`<rect x="${rx}" y="${ry}" width="${rw}" height="${RH - 4}" rx="6" fill="${H.cyan}" fill-opacity=".06" stroke="${H.cyan}" stroke-opacity=".35"/>`)
     // The ID tile, numbered as the blip on the radar.
@@ -2102,12 +2281,23 @@ export const agentConsole = (list: SubAgent[], now: number, x: number, y: number
       `<rect x="${gx.toFixed(1)}" y="${line1 - 9.5}" width="${gw.toFixed(1)}" height="13" rx="3" fill="none" stroke="${tagHue}" stroke-opacity=".9"/>` +
         `<text x="${(gx + 4).toFixed(1)}" y="${line1}" class="chip" style="font-size:9.5px;letter-spacing:.5px;fill:${tagHue}">${xml(tag)}</text>`,
     )
+    // Started without a model (the models rule): a small amber DEFAULT mark after the tag.
+    let tagEnd = gx + gw
+    if (a.picked === false) {
+      const dx = tagEnd + 4
+      const dw = 'DEFAULT'.length * 5.6 + 8
+      parts.push(
+        `<rect x="${dx.toFixed(1)}" y="${line1 - 9.5}" width="${dw.toFixed(1)}" height="13" rx="3" fill="${H.amber}" fill-opacity=".1" stroke="${H.amber}" stroke-opacity=".9"/>` +
+          `<text x="${(dx + 4).toFixed(1)}" y="${line1}" class="chip" style="font-size:8.5px;letter-spacing:.5px;fill:${H.amber}">DEFAULT</text>`,
+      )
+      tagEnd = dx + dw
+    }
     // The cost on the right.
     const right = rx + rw - 8
     if (costText) parts.push(`<text x="${right}" y="${line1}" class="hs" text-anchor="end" style="font-size:11.5px;fill:${H.text}">${xml(costText)}</text>`)
     const end = right - (costText ? costText.length * 6.9 + 8 : 0)
     // What it is doing, or how it ended: on its own line, or after the tag when compact.
-    const sx = compact ? gx + gw + 8 : nx
+    const sx = compact ? tagEnd + 8 : nx
     const sy = compact ? line1 : ry + 30
     const fs = compact ? 10 : 10.5
     const room = Math.floor((end - sx) / (fs * 0.6))
@@ -2576,7 +2766,47 @@ export const VIEW_ICONS: { view: SavvyView; icon: string; label: string }[] = [
   { view: 'radius', icon: '📝', label: 'Changes' },
   { view: 'cost', icon: '💲', label: 'Spend' },
   { view: 'reflect', icon: '💡', label: 'Reflect' },
+  { view: 'rules', icon: '🧠', label: 'Rules' },
 ]
+
+/**
+ * The Rules view's card: one row per rule with an ON/OFF chip, its title, and
+ * how often its check fired this session (for the rules Muka checks). While
+ * the rules as a whole are off (`paused`), every chip reads PAUSED.
+ */
+export const rulesCard = (rules: Rule[], off: readonly string[], hits: Record<string, number>, paused = false): { source: string; alt: string } => {
+  const W = HELM_W
+  const RH = 26
+  const top = 46
+  const onCount = rules.filter(r => !off.includes(r.id)).length
+  const total = rules.reduce((n, r) => n + (r.check ? (hits[r.id] ?? 0) : 0), 0)
+  const parts: string[] = [
+    `<text x="20" y="28" class="hl">${xml(paused ? `RULES · PAUSED · ${onCount} OF ${rules.length} SET ON` : `RULES · ${onCount} OF ${rules.length} ON`)}</text>`,
+    `<text x="${W - 20}" y="28" class="hl" text-anchor="end">${xml(`CHECKED · ${total}`)}</text>`,
+    `<line x1="20" y1="36" x2="${W - 20}" y2="36" stroke="${H.line}"/>`,
+  ]
+  rules.forEach((r, i) => {
+    const on = !off.includes(r.id)
+    const y = top + i * RH + 14
+    const hue = paused ? H.amber : on ? H.green : H.faint
+    const chip = hudChip(20, y, paused && on ? 'PAUSED' : on ? 'ON' : 'OFF', hue)
+    const n = hits[r.id] ?? 0
+    const checked = r.check ? `checked: ${n}` : ''
+    const tip = `${r.title} (${r.id}): ${on ? 'on' : 'off'}${r.when === 'large' ? ', sent with large prompts' : ''}${r.check ? `\n${r.check}` : ''}`
+    parts.push(
+      `<g class="row"><title>${xml(tip)}</title>` +
+        chip.svg +
+        `<text x="84" y="${y}" class="ht" style="font-size:12px${on && !paused ? '' : `;fill:${H.mute}`}">${xml(clip(r.title, 30))}</text>` +
+        (checked ? `<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="font-size:11px${n > 0 ? `;fill:${H.amber}` : ''}">${xml(checked)}</text>` : '') +
+        `</g>`,
+    )
+  })
+  const Hh = top + rules.length * RH + 8
+  const offList = rules.filter(r => off.includes(r.id)).map(r => r.id)
+  const hitList = rules.filter(r => r.check && (hits[r.id] ?? 0) > 0).map(r => `${r.id} ${hits[r.id]}`)
+  const alt = `Rules: ${paused ? 'paused (all off); ' : ''}${onCount} of ${rules.length} on.${offList.length > 0 ? ` Off: ${offList.join(', ')}.` : ''} Checked: ${hitList.length > 0 ? hitList.join(', ') : 'nothing yet'}.`
+  return { source: card(W, Hh, parts.join('')), alt: clip(alt, 400) }
+}
 
 // ---------------------------------------------------------------------------
 // Helm view cards: each view read at a glance, as a picture.
@@ -3315,11 +3545,13 @@ export type WasteState = {
   fails: Map<string, number>
   /** Whether the main agent has been told its context is filling. */
   ctxNudged: boolean
+  /** Whether the main agent has had the context rule's 50% note this climb. */
+  ctxEarly?: boolean
   /** Nudges waiting for the main agent's next tool result. */
   pendingMain: string[]
 }
 
-export const newWasteState = (): WasteState => ({ reads: new Map(), writes: new Map(), fails: new Map(), ctxNudged: false, pendingMain: [] })
+export const newWasteState = (): WasteState => ({ reads: new Map(), writes: new Map(), fails: new Map(), ctxNudged: false, ctxEarly: false, pendingMain: [] })
 
 const wasteState: WasteState = newWasteState()
 let nudgesOn = true
@@ -3347,7 +3579,7 @@ export const nextVerify = (state: MainInfo['verify'], effect: 'edit' | 'check' |
 const promptStats: { wasteCount: number; wasteTokens: number; guarded: number; size?: 'S' | 'M' | 'L' } = { wasteCount: 0, wasteTokens: 0, guarded: 0 }
 
 /** One thing a finished call wasted: what the agent is told, what Alerts lists, roughly how many tokens it cost. */
-export type WasteHit = { kind: 'reread' | 'retry' | 'big'; nudge: string; notice: string; tokens: number }
+export type WasteHit = { kind: 'reread' | 'retry' | 'big'; nudge: string; notice: string; tokens: number; rule?: string }
 
 const wpath = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
 
@@ -3359,6 +3591,7 @@ const wpath = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
 export const wasteCheck = (
   st: WasteState,
   c: { agent: string; tool: string; args: Record<string, unknown>; isError: boolean; text: string; at: number },
+  opts: { recover?: boolean } = {},
 ): WasteHit[] => {
   const hits: WasteHit[] = []
   const path = typeof c.args.file_path === 'string' ? c.args.file_path : typeof c.args.notebook_path === 'string' ? c.args.notebook_path : undefined
@@ -3370,11 +3603,16 @@ export const wasteCheck = (
     const n = (st.fails.get(failKey) ?? 0) + 1
     st.fails.set(failKey, n)
     if (n === 2 || n === 4) {
+      // The recover rule's wording at the second failure, while that rule is on.
+      const recover = n === 2 && opts.recover === true
       hits.push({
         kind: 'retry',
-        nudge: `Muka: this ${c.tool} call has now failed ${n} times the same way. Don't run it again unchanged: read the error, change the approach, or (main agent) consult the advisor.`,
+        nudge: recover
+          ? `Muka: this ${c.tool} call has now failed ${n} times the same way. Stop patching: go back to the last good state (git restore / rewind) and try a different approach, or report the blocker.`
+          : `Muka: this ${c.tool} call has now failed ${n} times the same way. Don't run it again unchanged: read the error, change the approach, or (main agent) consult the advisor.`,
         notice: `${c.tool} failed ${n}× the same way: ${clip(what, 80)}`,
         tokens,
+        ...(recover ? { rule: 'recover' } : {}),
       })
     }
     return hits
@@ -3409,19 +3647,27 @@ export const wasteCheck = (
 // ---------------------------------------------------------------------------
 // Smarter rules: a short core in every chat; the full large-task steps join
 // only when a prompt looks large (once per conversation, again after a
-// compaction).
+// compaction). The texts are assembled from the rule registry at the top.
 
-const LARGE_HEAD = '## Large tasks: plan, then swarm'
-const LARGE_END = '## Helpers'
+/** Whether a rule applies now: the rules are on (smart) and this one is not switched off. */
+export const ruleOn = (id: string): boolean => isSmart && !rulesOff.includes(id)
 
-/** The full large-task section of the rules. */
-export const MUKA_LARGE = MUKA_RULES.slice(MUKA_RULES.indexOf(LARGE_HEAD), MUKA_RULES.indexOf(LARGE_END)).trim()
+/** One more hit for a rule's check this session, listed under ♻️ in Alerts. */
+const ruleHit = async ($: EngineInterface, id: string, who: string, notice?: string): Promise<void> => {
+  ruleHits[id] = (ruleHits[id] ?? 0) + 1
+  if (notice) await addNotice($, 'waste', who, notice).catch(() => undefined)
+}
 
-/** The rules every chat starts with: everything but the large-task details, which a one-paragraph summary stands in for. */
-export const MUKA_CORE = MUKA_RULES.replace(
-  MUKA_LARGE,
-  '## Large tasks\n\nFor an L task: scout with `Explore`, write PLAN.md (phases; pieces with Goal / May touch / Must not touch / Done when / Test command; the shared interfaces), one `builder` per independent piece, fit and test it yourself, then one `reviewer`. Muka adds the full steps to a prompt that looks large.',
-)
+/** The size rule's note, at Main's third tool call of a prompt with no "Size:" line. */
+export const SIZE_NOTE = 'Muka: you have not sized this task yet. Say its size in one line (Size: S, M or L) before going on, as the rules ask.'
+
+/** The verify rule's note, carried by the prompt after a turn that changed files and verified nothing. */
+export const UNVERIFIED_NOTE =
+  'Muka: your last turn changed files without verifying them. Verify first: run the tests, build and linter (and the app for visible changes), then say what ran.'
+
+/** The models rule's note to whoever started a helper without naming a model. */
+export const defaultModelNote = (type: string, model: string): string =>
+  `Muka: you started ${type} without naming a model, so it runs on its default (${model}). Name a model and effort on every helper call.`
 
 /** Whether a prompt looks like a large task: long, a list of parts, or the words of a big change. */
 export const looksLarge = (text: string): boolean => {
@@ -3433,6 +3679,13 @@ export const looksLarge = (text: string): boolean => {
 
 let largeSent = false
 let lastCtx = 0
+/** Rule notes waiting for your next prompt (the verify rule's). */
+const pendingPrompt: string[] = []
+/** This prompt's tool calls by Main, and whether the size rule has asked for a size yet. */
+let mainCalls = 0
+let sizeAsked = false
+/** Whether this prompt's unverified finish has been flagged already. */
+let verifyFlagged = false
 
 // ---------------------------------------------------------------------------
 // Helper model guard: the rules' helper models, kept before a helper starts.
@@ -3480,14 +3733,36 @@ export const helperBrief = (level: number): string =>
     '- The same error twice: change the approach. Keep tool output small (Grep, line ranges, trimmed logs).',
   ].join('\n')
 
-/** The nudge for a filling context, once per climb past 70%. */
-export const contextNudge = (st: WasteState, percent: number | undefined): string | undefined => {
+/**
+ * The nudge for a filling context: once per climb past 50% (the context
+ * rule's /compact note, when `early`), and once per climb past 70% (the waste
+ * nudge, when `late`). A climb past 70% that skipped the 50% note gets only
+ * the 70% one.
+ */
+export const contextNudgeAt = (
+  st: WasteState,
+  percent: number | undefined,
+  opts: { early?: boolean; late?: boolean } = {},
+): { stage: 50 | 70; text: string } | undefined => {
   if (percent === undefined) return undefined
   if (percent < 60) st.ctxNudged = false
-  if (percent < 70 || st.ctxNudged) return undefined
-  st.ctxNudged = true
-  return `Muka: the context is ${Math.round(percent)}% full. Finish the piece in hand, keep tool output small, and hand big reading to a helper, so nothing important is lost when it is compacted.`
+  if (percent < 40) st.ctxEarly = false
+  const pct = Math.round(percent)
+  if ((opts.late ?? true) && percent >= 70 && !st.ctxNudged) {
+    st.ctxNudged = true
+    st.ctxEarly = true
+    return { stage: 70, text: `Muka: the context is ${pct}% full. Finish the piece in hand, keep tool output small, and hand big reading to a helper, so nothing important is lost when it is compacted.` }
+  }
+  if ((opts.early ?? true) && percent >= 50 && !st.ctxEarly) {
+    st.ctxEarly = true
+    return { stage: 50, text: `Muka: the context is ${pct}% full. Finish the piece in hand, then run /compact (tell the user you are doing so). Start an unrelated task in a fresh chat (/clear), and send big reading to a helper so only its conclusion comes back.` }
+  }
+  return undefined
 }
+
+/** The context nudge's text alone. */
+export const contextNudge = (st: WasteState, percent: number | undefined, opts?: { early?: boolean; late?: boolean }): string | undefined =>
+  contextNudgeAt(st, percent, opts)?.text
 
 /** /muka smart on|off: the rules for new chats, and a note so this chat follows the change at once. */
 const setSmart = async ($: EngineInterface, want: boolean): Promise<{ text: string }> => {
@@ -3507,6 +3782,45 @@ const setSmart = async ($: EngineInterface, want: boolean): Promise<{ text: stri
   }
 }
 
+/** A list of rule titles as read aloud: "A", "A and B", "A, B and C". */
+const titles = (list: Rule[]): string =>
+  list.length <= 1 ? (list[0]?.title ?? '') : `${list.slice(0, -1).map(r => r.title).join(', ')} and ${list.at(-1)!.title}`
+
+/**
+ * Switches rules on or off (/muka rule <id> on|off, the Rules view), for new
+ * chats and, through one short note, for this one at once. The note goes only
+ * while the rules are on (smart); an unchanged rule sends none.
+ */
+export const setRules = async ($: EngineInterface, ids: readonly string[], want: boolean): Promise<{ text: string }> => {
+  const picked = RULES.filter(r => ids.includes(r.id))
+  if (picked.length === 0) return { text: `Muka has no rule ${ids.join(', ')}. The rules: ${RULES.map(r => r.id).join(', ')}.` }
+  const changed = picked.filter(r => rulesOff.includes(r.id) === want)
+  applyRulesOff(want ? rulesOff.filter(id => !ids.includes(id)) : [...rulesOff, ...ids])
+  await $.store.set('rulesOff', rulesOff)
+  if (changed.length > 0 && isSmart) {
+    const one = changed.length === 1
+    const note = want
+      ? `Muka: the ${one ? 'rule' : 'rules'} ${titles(changed)} ${one ? 'is' : 'are'} now on. From now on, follow ${one ? 'it' : 'them'}:\n\n${changed.map(r => r.text).join('\n\n')}`
+      : `Muka: the ${one ? 'rule' : 'rules'} ${titles(changed)} ${one ? 'is' : 'are'} now off and no longer ${one ? 'applies' : 'apply'} in this chat.`
+    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } }).catch(() => undefined)
+  }
+  const verb = want ? 'on' : 'off'
+  return {
+    text: `Muka rule${picked.length === 1 ? '' : 's'} ${verb}: ${titles(picked)}.${isSmart ? '' : ' The rules as a whole are off (/muka smart): this takes effect when they are on again.'}`,
+  }
+}
+
+/** /muka rules: every rule, whether it is on, and how often its check fired this session. */
+export const rulesList = (): string =>
+  [
+    `Muka rules (${isSmart ? 'on' : 'all off: /muka smart turns them on'}); ${RULES.length - rulesOff.length} of ${RULES.length} switched on:`,
+    ...RULES.map(r => {
+      const on = !rulesOff.includes(r.id)
+      return `- ${on ? 'ON ' : 'OFF'} ${r.id}: ${r.title}${r.when === 'large' ? ' (large prompts)' : ''}${r.check ? ` · checked: ${ruleHits[r.id] ?? 0}` : ''}`
+    }),
+    'Switch one: /muka rule <id> on|off; all: /muka rule all on|off. The Rules tab (🧠) has the same switches.',
+  ].join('\n')
+
 /** Motion on or off, kept across chats; the open pane redraws at once. */
 const setMotion = async ($: EngineInterface, want: boolean): Promise<void> => {
   motionOn = want
@@ -3520,6 +3834,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     'Muka',
     `- Panel: ${isOn ? 'on' : 'off'} (/muka on, /muka off)`,
     `- Smart rules: ${isSmart ? 'on' : 'off'} (/muka smart, /muka smart off)`,
+    `- Rules switched on: ${RULES.length - rulesOff.length} of ${RULES.length} (/muka rules, /muka rule <id> on|off)`,
     `- Delete guard: ${isGuardOn ? 'on' : 'off'} (/muka guard on, /muka guard off)`,
     `- Pings: ${pingsOn ? 'on' : 'off'} (/muka ping on, /muka ping off)`,
     `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
@@ -3529,7 +3844,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     '- REA (Reverse Engineer Anything): /muka rea (status), /muka rea setup (install or update), /muka rea doctor',
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
     '- Both panel and rules at once: /muka all on, /muka all off',
-    '- Setup: /muka setup installs the helper agents, the status line and the settings; /muka setup undo puts back what it replaced',
+    '- Setup: /muka setup installs the helper agents, the verify skill, the status line and the settings; /muka setup undo puts back what it replaced',
   ].join('\n'),
 })
 
@@ -3622,6 +3937,8 @@ const reaStatus = async ($: EngineInterface): Promise<string> => {
 }
 
 const SETUP_LAST = 'muka-setup-last.json'
+/** The skills /muka setup installs, each from extras/skills/<name>/SKILL.md to ~/.claude/skills/<name>/SKILL.md. */
+const SETUP_SKILLS = ['verify']
 
 /**
  * Muka's settings over yours: \`env\` merged key by key, every other key Muka
@@ -3698,6 +4015,10 @@ const runSetup = async ($: EngineInterface): Promise<{ text: string }> => {
   const agentsDir = `${root}/extras/agents`
   for (const f of (await $.fs.list(agentsDir)).filter(x => x.kind === 'file' && x.name.endsWith('.md'))) {
     await copy(`${agentsDir}/${f.name}`, `${claude}/agents/${f.name}`, `agent: ${f.name.replace(/\.md$/, '')}`)
+  }
+  // The skills Muka ships (verify: prove a change ran before calling it done).
+  for (const name of SETUP_SKILLS) {
+    await copy(`${root}/extras/skills/${name}/SKILL.md`, `${claude}/skills/${name}/SKILL.md`, `skill: ${name}`)
   }
   await copy(`${root}/extras/statusline.js`, `${claude}/statusline.js`, 'status line script')
   const merged = mergeMukaSettings(cur, add)
@@ -3808,6 +4129,17 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     return { text: recapText(entries, label) }
   }
   if (words[0] === 'smart') return setSmart($, words[1] !== 'off')
+  if (words[0] === 'rules' && words[1] === undefined) return { text: rulesList() }
+  if (words[0] === 'rules' && (words[1] === 'on' || words[1] === 'off')) return setRules($, RULES.map(r => r.id), words[1] === 'on')
+  if (words[0] === 'rule' || words[0] === 'rules') {
+    const id = words[1]
+    if (id === undefined) return { text: rulesList() }
+    const ids = id === 'all' ? RULES.map(r => r.id) : [id]
+    if (words[2] !== undefined && words[2] !== 'on' && words[2] !== 'off') return { text: `Use /muka rule ${id} on or /muka rule ${id} off.` }
+    // No on|off: the rule flips.
+    const want = words[2] === 'on' ? true : words[2] === 'off' ? false : id === 'all' ? rulesOff.length > 0 : rulesOff.includes(id)
+    return setRules($, ids, want)
+  }
   if (words[0] === 'rea') {
     if (words[1] === 'setup' || words[1] === 'install' || words[1] === 'update') return { text: await startRea($, 'setup') }
     if (words[1] === 'doctor' || words[1] === 'check') return { text: await startRea($, 'doctor') }
@@ -3885,7 +4217,7 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'muka',
-      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday]',
+      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday]',
     })
     // On in every chat unless /savvy off turned it off; the delete guard is off
     // (it never asks) unless /savvy guard on turned it on.
@@ -3896,6 +4228,13 @@ export const register: Register = on => {
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
     modelGuardOn = (await $.store.get('models')) === true
+    const storedOff = await $.store.get('rulesOff').catch(() => undefined)
+    applyRulesOff(Array.isArray(storedOff) ? storedOff : [])
+    for (const k of Object.keys(ruleHits)) delete ruleHits[k]
+    pendingPrompt.length = 0
+    mainCalls = 0
+    sizeAsked = false
+    verifyFlagged = false
     largeSent = false
     Object.assign(wasteState, newWasteState())
     const storedBudget = await $.store.get('budget').catch(() => undefined)
@@ -3922,21 +4261,30 @@ export const register: Register = on => {
   on('prompt.context', async ($, e, next) => {
     const smart = (await $.store.get('smart').catch(() => undefined)) !== false
     if (!smart) return next(e)
-    const tune = sizingNote(await readLogDays($, 7).catch(() => [])) ?? ''
-    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: tune ? `${MUKA_CORE}
+    // Only the rules switched on; the sizing tune belongs to the size rule.
+    const storedOff = await $.store.get('rulesOff').catch(() => undefined)
+    const off = Array.isArray(storedOff) ? storedOff.filter((x): x is string => typeof x === 'string') : rulesOff
+    const core = coreText(off)
+    const tune = off.includes('size') ? '' : (sizingNote(await readLogDays($, 7).catch(() => [])) ?? '')
+    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: tune ? `${core}
 
-${tune}` : MUKA_CORE }] })
+${tune}` : core }] })
   })
 
   // A prompt that looks large brings the full large-task steps with it, once
-  // per conversation (again after a compaction).
+  // per conversation (again after a compaction); a rule note waiting for
+  // your next prompt (an unverified finish) rides on it too.
   on('prompt.submit', async ($, e, next) => {
     try {
-      if (isSmart && !largeSent && e.command === undefined && e.isMeta !== true && looksLarge(e.text)) {
-        largeSent = true
-        return next({ ...e, context: [...(e.context ?? []), `Muka: this looks like a large task. The full steps from the coordination rules:
+      if (e.command === undefined && e.isMeta !== true) {
+        const extra = pendingPrompt.splice(0)
+        if (ruleOn('large') && !largeSent && looksLarge(e.text)) {
+          largeSent = true
+          extra.push(`Muka: this looks like a large task. The full steps from the coordination rules:
 
-${MUKA_LARGE}`] })
+${largeText(rulesOff)}`)
+        }
+        if (extra.length > 0) return next({ ...e, context: [...(e.context ?? []), ...extra] })
       }
     } catch {
       // Best effort: the prompt goes in as typed.
@@ -3962,8 +4310,8 @@ ${MUKA_LARGE}`] })
     let call = e
     try {
       const list = await read($, agents)
-      // While the rules are on, a helper gets the short rules with its brief.
-      if (isSmart) {
+      // While the rules (and the sub-masters rule) are on, a helper gets the short rules with its brief.
+      if (ruleOn('submasters')) {
         // A helper that writes code gets the short rules, so it can act as a sub-master.
         if (!READERS.has(e.subagentType) && e.subagentType !== 'fork') {
           call = { ...call, prompt: `${e.prompt}
@@ -3999,6 +4347,23 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         if ((typeof effort === 'string' && effort.trim()) || typeof effort === 'number') agent.effort = clean(String(effort))
         if (guarded) promptStats.guarded += 1
         if (guarded) await addNotice($, 'waste', agent.type, `asked for ${guarded}, ran on ${call.model} (the rules' model for ${agent.type})`)
+        // The models rule: a helper started without naming a model runs on its
+        // default; it is marked, and whoever started it hears so at its next step.
+        if (ruleOn('models') && e.subagentType !== 'fork') {
+          agent.picked = e.model !== undefined && e.model !== ''
+          if (!agent.picked) {
+            const before = await read($, agents)
+            const starter = e.parentAgentId === undefined ? 'Main' : agentLabel(before, e.parentAgentId)
+            const note = defaultModelNote(agent.type, agent.model || 'its default')
+            if (e.parentAgentId === undefined) wasteState.pendingMain.push(note)
+            else {
+              const at = Date.now()
+              const steerNote: SteerNote = { id: `rule-models-${agent.id}-${at}`, text: note, to: e.parentAgentId, toLabel: starter, at, from: 'muka' }
+              await update($, steer, l => [...l, steerNote].slice(-20))
+            }
+            await ruleHit($, 'models', starter, `${agent.type} started without a model: runs on its default (${agent.model || 'unknown'})`)
+          }
+        }
         await update($, agents, list => [...list.filter(a => a.id !== agent.id), agent].slice(-50))
         await refreshStatus($)
       }
@@ -4035,21 +4400,40 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
     try {
       if (ran.deny === undefined && !isGuardQuestion && !isOwnPush) {
         const notes = await takeSteerNotes($, e.agentId)
-        if (notes.length > 0) out = { ...ran, context: [...(ran.context ?? []), ...notes.map(steerContext)] } as typeof ran
+        if (notes.length > 0) out = { ...ran, context: [...(ran.context ?? []), ...notes.map(n => (n.from === 'muka' ? n.text : steerContext(n)))] } as typeof ran
       }
     } catch {
       // Best effort: the result goes back as it came.
     }
     // Waste catchers: a re-read, a retry loop or a huge result is pointed out
     // on this very result; a filling context waits for Main's next one.
+    // The recover rule's note rides here too, nudges or not; and Main's
+    // waiting notes (a filling context, a helper started on its default, an
+    // unsized task) are delivered on its result.
     try {
-      if (nudgesOn && ran.deny === undefined && !isGuardQuestion && !isOwnPush) {
-        const hits = wasteCheck(wasteState, { agent: e.agentId ?? 'main', tool: e.tool, args, isError: ran.isError === true, text: typeof ran.text === 'string' ? ran.text : '', at: Date.now() })
+      if (ran.deny === undefined && !isGuardQuestion && !isOwnPush) {
+        const recover = ruleOn('recover')
+        const hits =
+          nudgesOn || recover
+            ? wasteCheck(wasteState, { agent: e.agentId ?? 'main', tool: e.tool, args, isError: ran.isError === true, text: typeof ran.text === 'string' ? ran.text : '', at: Date.now() }, { recover }).filter(
+                h => nudgesOn || h.rule === 'recover',
+              )
+            : []
+        // The size rule: Main's third call of a prompt, and still no "Size:" line.
+        if (e.agentId === undefined) {
+          mainCalls += 1
+          if (mainCalls >= 3 && !sizeAsked && promptStats.size === undefined && ruleOn('size')) {
+            sizeAsked = true
+            wasteState.pendingMain.push(SIZE_NOTE)
+            await ruleHit($, 'size', 'Main', 'Main started work without sizing the task')
+          }
+        }
         const extra = [...hits.map(h => h.nudge), ...(e.agentId === undefined ? wasteState.pendingMain.splice(0) : [])]
         if (extra.length > 0) out = { ...out, context: [...(out.context ?? []), ...extra] } as typeof ran
         for (const h of hits) {
           promptStats.wasteCount += 1
           promptStats.wasteTokens += h.tokens
+          if (h.rule) ruleHits[h.rule] = (ruleHits[h.rule] ?? 0) + 1
           await addNotice($, 'waste', who, `${h.notice} (~${kTokens(h.tokens)} tokens)`)
         }
       }
@@ -4166,6 +4550,9 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       await update($, activity, () => [])
       await update($, focus, () => '')
       Object.assign(promptStats, { wasteCount: 0, wasteTokens: 0, guarded: 0, size: undefined })
+      mainCalls = 0
+      sizeAsked = false
+      verifyFlagged = false
       const prompt = clip(clean(e.text), 120)
       await update($, main, m => ({ ...m, current: undefined, isWorking: true, stepCount: 0, turnStartedAt: Date.now(), turnEndedAt: undefined, prompt, promptCostStart: m.costUsd ?? 0, promptBudget: undefined, budgetStage: 0, verify: undefined }))
     } else {
@@ -4240,6 +4627,17 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         ...(promptStats.size ? { size: promptStats.size } : {}),
       }).catch(() => undefined)
       await pingDone($, info, e.durationMs).catch(() => undefined)
+      // The verify rule: files changed this prompt and nothing checked them.
+      if (ruleOn('verify') && !verifyFlagged && e.reason !== 'aborted' && info.verify === 'unverified' && files.length > 0) {
+        verifyFlagged = true
+        pendingPrompt.push(UNVERIFIED_NOTE)
+        await ruleHit($, 'verify', 'Main', 'Main finished without verifying its changes')
+        try {
+          await Promise.resolve($.ui.toast('♻️ Main finished without verifying its changes')).catch(() => undefined)
+        } catch {
+          // Best effort.
+        }
+      }
     }
     await refreshStatus($)
     return done
@@ -4267,12 +4665,15 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       }
       lastCtx = ctx.percent
     }
-    // A filling context: Main hears about it on its next tool result.
-    if (nudgesOn) {
-      const nudge = contextNudge(wasteState, ctx.percent)
+    // A filling context: Main hears about it on its next tool result (at 50%
+    // from the context rule, at 70% from the waste nudges).
+    const early = ruleOn('context')
+    if (nudgesOn || early) {
+      const nudge = contextNudgeAt(wasteState, ctx.percent, { early, late: nudgesOn })
       if (nudge) {
-        wasteState.pendingMain.push(nudge)
-        await addNotice($, 'waste', 'Main', `context ${Math.round(ctx.percent ?? 0)}% full`).catch(() => undefined)
+        wasteState.pendingMain.push(nudge.text)
+        if (nudge.stage === 50) await ruleHit($, 'context', 'Main', `context ${Math.round(ctx.percent ?? 0)}% full: told to finish the piece and /compact`)
+        else await addNotice($, 'waste', 'Main', `context ${Math.round(ctx.percent ?? 0)}% full`).catch(() => undefined)
       }
     }
     await refreshStatus($)
@@ -4466,6 +4867,41 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       return page([
         <Button key="report-back" label="← Bridge" onPress={() => update($, view, () => 'flow')} />,
         <Markdown text={text} />,
+      ])
+    }
+
+    if (current === 'rules') {
+      // The rule controller: each rule's state and checks, and a switch per rule.
+      const flip = (ids: string[], want: boolean) => async () => {
+        await setRules($, ids, want)
+        await update($, tick, n => n + 1)
+      }
+      const switches = (
+        <Box key="rule-switches" flexDirection="row" flexWrap="wrap" gap={1}>
+          {RULES.map(r => {
+            const isRuleOn = !rulesOff.includes(r.id)
+            return <Button key={`rule-${r.id}`} label={`${isRuleOn ? '●' : '○'} ${r.title}`} variant={isRuleOn ? 'primary' : 'secondary'} onPress={flip([r.id], !isRuleOn)} />
+          })}
+          <Button key="rules-all-on" label="All on" onPress={flip(RULES.map(r => r.id), true)} />
+          <Button key="rules-all-off" label="All off" onPress={flip(RULES.map(r => r.id), false)} />
+        </Box>
+      )
+      const pausedLine = isSmart ? <Text> </Text> : <Text color="yellow">🧠 Rules is off (Bridge, or /muka smart): no rule is sent or checked until it is on.</Text>
+      if (isDesk) return page([pic(rulesCard(RULES, rulesOff, ruleHits, !isSmart)), pausedLine, switches])
+      return page([
+        <Text bold>Rules: the coordination rules Muka sends and checks</Text>,
+        pausedLine,
+        ...RULES.map(r => {
+          const isRuleOn = !rulesOff.includes(r.id)
+          return (
+            <Text>
+              <Text color={isRuleOn ? 'green' : undefined} dimColor={!isRuleOn}>{isRuleOn ? 'ON ' : 'OFF'}</Text> {r.title}
+              {r.when === 'large' ? <Text dimColor> (large prompts)</Text> : ''}
+              {r.check ? <Text dimColor> · checked: {ruleHits[r.id] ?? 0}</Text> : ''}
+            </Text>
+          )
+        }),
+        switches,
       ])
     }
 

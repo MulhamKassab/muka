@@ -41,8 +41,10 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka` or `/muka status` | What is on and off |
 | `/muka on` / `/muka off` | The side panel (on by default) |
 | `/muka smart` / `/muka smart off` | The coordination rules (on by default) |
+| `/muka rules` | Each rule, on or off, and how often its check fired this session |
+| `/muka rule <id> on` / `/muka rule <id> off` | Switch one rule (`/muka rule all off` for every one) |
 | `/muka all on` / `/muka all off` | Panel and rules together |
-| `/muka setup` / `/muka setup undo` | Install, or put back, the agents, status line and settings |
+| `/muka setup` / `/muka setup undo` | Install, or put back, the agents, the verify skill, status line and settings |
 | `/muka budget 5` / `/muka budget off` | A spending cap per prompt (none by default) |
 | `/muka guard on` / `/muka guard off` | Ask before shell commands delete files (off by default) |
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
@@ -67,6 +69,26 @@ While smart is on, Muka adds the coordination rules to every new chat, the same 
 
 Every chat gets a short core of the rules; the full large-task steps join only when a prompt looks large (long, a list of parts, or words like "refactor" or "one by one"), once per conversation and again after a compaction.
 
+## Rule controller
+
+The rules are a registry of nine separate rules. Each one can be switched on or off by itself; a rule that is off is neither sent to Claude nor checked. `/muka smart off` (🧠 Rules on the Bridge) still pauses all of them at once.
+
+| Id | Rule | How Muka checks it |
+|---|---|---|
+| `size` | Size every task first (S, M, L, careful mode) | If Main's third tool call of a prompt comes with no "Size:" line, one note asks for it |
+| `large` | Large tasks: plan, then swarm (sent only with prompts that look large; every chat gets a one-paragraph summary) | Not checked |
+| `helpers` | Helpers: short briefs and reports, the advisor, stop rules, Muka notes | Not checked |
+| `models` | Models: name `model` and `effort` on every Agent call; Opus or Fable for planning an L task, hard debugging and the final review, Sonnet for routine code, Haiku for reading | A helper started without a model is marked **DEFAULT** (amber) in the agents console, and whoever started it is told at its next step |
+| `submasters` | Sub-masters: every helper may run its piece like the master, at any depth (also the brief added to a helper that writes code) | Not checked |
+| `verify` | Verify before done: run the tests, build, linter and app; never edit a check to pass; say what ran | A turn that changed files and ran no test, build, lint or app check is flagged in Alerts with a toast, and your next prompt carries a note asking Claude to verify first |
+| `context` | Context: at about 50% full, finish the piece and `/compact`; a fresh chat for an unrelated task; big reading to a helper | At 50% full Main is told, once per climb, on its next tool result (the 70% waste nudge stays) |
+| `recover` | Recover: after two failed fixes of the same problem, go back to the last good state and try another way, or report the blocker | The second identical failure of a call brings this note (even with the waste nudges off) |
+| `questions` | Questions: one option marked recommended; go ahead with it when you're away, except for deleting, spending or sending | Not checked |
+
+Every check that fires is counted for the session and listed under ♻️ in ⚠️ Alerts.
+
+To switch a rule: `/muka rule verify off`, `/muka rule verify on`, or `/muka rule all on|off`; or open the 🧠 **Rules** tab in the panel, which shows each rule as a row (ON/OFF and "checked: n") with a button per rule plus **All on** and **All off**. The choice is kept across chats (store key `rulesOff`), and switching tells the current chat at once in one short note. A small chat gets no more rule text than before the rules were split.
+
 ## Smarter work
 
 Muka does more than show the agents: it keeps them efficient.
@@ -82,6 +104,7 @@ Muka does more than show the agents: it keeps them efficient.
 `/muka setup` installs:
 
 - **Agents** in `~/.claude/agents`: `Explore` (Haiku, read-only), `builder` (Sonnet), `reviewer` (Sonnet, read-only), `checker` (Opus, read-only, only on request).
+- **The `verify` skill** in `~/.claude/skills/verify/SKILL.md`: used before calling work done or committing. It finds the project's test, build, lint and run commands (package.json, Makefile, pyproject and the like, and the CI workflows), runs them, starts a web or desktop app and walks the changed path with the browser or computer tools (with a screenshot), never edits a test to pass, and ends with what ran and what was not checked.
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
 - **Settings** merged into `~/.claude/settings.json`: Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
 - **[Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance)**, Google Chrome's plugin of up-to-date web best practices (HTML, CSS, browser JavaScript, accessibility, performance): its marketplace and plugin are added to the settings, and the install prompt installs it.
@@ -129,7 +152,7 @@ Muka runs inside Claude Code as a plugin. Everything it does:
 
 - **Network:** none. Muka makes no network calls of its own.
 - **Programs it runs:** only `npx rea-agents …`, and only when you type `/muka rea setup` or `/muka rea doctor`.
-- **Files it writes:** only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
+- **Files it writes:** only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify skill in `~/.claude/skills/verify`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
 - **Files it reads:** your settings during setup, `~/.claude.json` and `~/.claude/skills` for `/muka rea`, and the files the agents change (to show their diffs).
 - **Model calls:** one, the 💡 Reflect review, and only when you press it.
 - **What it changes in a conversation:** the rules block at the start of a chat (while smart is on), short notes added after tool results (waste nudges, budget warnings, your steering notes), a short brief added to the task of a helper that writes code, a helper's model when you turn the model guard on, and a refused shell command when you turn the delete guard on and answer Block.

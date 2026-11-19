@@ -38,7 +38,7 @@ const engine = (on: On) => {
 const start = async ($: Parameters<Body>[0]) => {
   await $.session.start({ cwd: 'C:/work', surface: 'desktop', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'build it' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build the mailer', subagentType: 'builder' } as never)
+  await $.agent.spawn({ prompt: 'p', description: 'Build the mailer', subagentType: 'builder', model: 'sonnet' } as never)
   await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-1' } as never)
 }
 

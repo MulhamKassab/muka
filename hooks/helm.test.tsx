@@ -159,10 +159,12 @@ test('/muka works, and the budget warns the agents at 70% and 100%', async ($, o
   expect((await $.command.run({ command: 'muka', args: 'budget' } as never)).text).toMatch(/Muka budget is \$1\.00 per prompt/)
   expect((await $.command.run({ command: 'muka', args: 'budget 2' } as never)).text).toMatch(/Muka budget: \$2\.00 per prompt/)
   expect((await $.command.run({ command: 'muka', args: 'budget' } as never)).text).toMatch(/Muka budget is \$2\.00 per prompt/)
+  // This prompt is never sized (no model text here); the size rule's own note is tested in rules.test.
+  await $.command.run({ command: 'muka', args: 'rule size off' } as never)
 
   await $.session.measure(cost(10))
   await $.turn.start({ turnId: 't-0', text: 'build the mailer' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder' } as never)
+  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder', model: 'sonnet' } as never)
   // PLAN.md sets this prompt's budget to $1.
   await $.tool.call({ tool: 'Write', file_path: 'C:\\tmp\\PLAN.md', content: '# Plan\nBudget: $1\n' } as never)
   await $.session.measure(cost(10.5))
@@ -223,7 +225,8 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   expect(source).toContain('>CONTEXT<')
   // The views are one row of icons, the open one primary; steering lives on the Bridge, so no Steer icon.
   const tabs = (await desk.findAll({ type: 'Button' })).filter(b => String(b.props.key).startsWith('tab-'))
-  expect(tabs).toHaveLength(6)
+  expect(tabs).toHaveLength(7)
+  expect(tabs.at(-1)!.props.key).toBe('tab-rules')
   expect(tabs.some(b => b.props.key === 'tab-steer')).toBe(false)
   expect(tabs.filter(b => b.props.variant === 'primary').map(b => b.props.key)).toEqual(['tab-flow'])
   expect(String(tabs[0]!.props.label)).toBe('🧭')
@@ -337,7 +340,7 @@ test('the Bridge actions send notes to Main and the running helpers, and toast',
   const toasts = engine(on)
   await deskStart($)
   await $.turn.start({ turnId: 't-0', text: 'build it' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder' } as never)
+  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder', model: 'sonnet' } as never)
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const keys = (await desk.findAll({ type: 'Button' })).map(b => String(b.props.key))
   expect(new Set(keys).size).toBe(keys.length)
