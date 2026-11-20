@@ -57,14 +57,15 @@ test('the new rule texts say what the rule controller asks', () => {
   const text = (id: string) => RULES.find(r => r.id === id)!.text
   expect(text('models')).toMatch(/MUST pass `model` \(and `effort`\) on every Agent call/)
   expect(text('models')).toMatch(/default is only a fallback/)
-  expect(text('models')).toMatch(/`opus` \(or `fable`\).*planning an L task, hard debugging, the final review/)
-  expect(text('models')).toMatch(/`sonnet`.*routine implementation/)
+  expect(text('models')).toMatch(/cheapest that fits; step up one level only after a real shortfall/)
+  expect(text('models')).toMatch(/`opus` \(or `fable`\).*only planning an L task, a bug sonnet cannot fix, and the final review of an L task/)
+  expect(text('models')).toMatch(/`sonnet`.*implementation, tests, docs/)
   expect(text('models')).toMatch(/`haiku`.*reading/)
   expect(text('context')).toMatch(/50% full, finish the piece in hand and run \/compact \(say so to the user\)/)
   expect(text('context')).toMatch(/fresh chat \(\/clear\)/)
   expect(text('recover')).toMatch(/two failed fixes of the same problem, stop patching: go back to the last good state \(git restore \/ rewind\)/)
   // The rules Muka checks say how.
-  expect(RULES.filter(r => r.check).map(r => r.id)).toEqual(['size', 'models', 'verify', 'context', 'recover'])
+  expect(RULES.filter(r => r.check).map(r => r.id)).toEqual(['size', 'helpers', 'models', 'verify', 'context', 'recover'])
 })
 
 test('a rule switched off is left out of the core, the full rules and the large steps', () => {
@@ -126,7 +127,7 @@ test('the rules card: a row per rule, ON/OFF, and checked counts', () => {
   expect(c.source).toContain('CHECKED · 3')
   expect(c.source.match(/>ON<\/text>/g)).toHaveLength(8)
   expect(c.source.match(/>OFF<\/text>/g)).toHaveLength(1)
-  expect(c.source.match(/checked: \d/g)).toHaveLength(5)
+  expect(c.source.match(/checked: \d/g)).toHaveLength(6)
   // Strict XML: no double quote inside an attribute value, nothing unescaped.
   expect(c.source).not.toMatch(/="[^"]*"[^\s/>]/)
   expect(c.source).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;|#)/)

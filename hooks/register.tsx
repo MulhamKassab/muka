@@ -42,14 +42,14 @@ export const RULES: Rule[] = [
     id: 'size',
     title: 'Size every task first',
     when: 'always',
-    check: "Main's third tool call of a prompt with no 'Size:' line brings one note asking for it.",
+    check: "Main's third tool call of a prompt with no 'Size:' line brings one note asking for it; helpers beyond the size (any on S, a third on M) bring one note quoting the rule.",
     text: [
       '## Size every task first',
       '',
       'Before starting, decide the size and say it in one line (for example "Size: M").',
       '',
       '- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.',
-      '- **M**: needs research or reading many files. Send searching and reading to `Explore` (several at once when the questions are independent); build it yourself.',
+      '- **M**: needs research or reading many files. At most two `Explore` helpers read; you build.',
       '- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: "Large tasks" below.',
       '- **Careful mode**: only when the user says "careful mode", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.',
     ].join('\n'),
@@ -80,30 +80,30 @@ export const RULES: Rule[] = [
     id: 'helpers',
     title: 'Helpers',
     when: 'always',
+    check: 'Starting a helper of a type while a finished one of that type from this prompt exists brings one note: continue it with SendMessage.',
     text: [
       '## Helpers',
       '',
-      '- **Reports:** at most 150 words, as Changed / Tested / Open issues. `Explore` returns locations and facts. Briefs going down are short too: the goal, the files, what done looks like; never paste whole files into a brief.',
-      '- **The advisor is for the main session only,** before a big or risky approach, once on an L plan, or when the same error comes back twice. Not for small tasks, not to confirm a task is done. Helpers report a blocker instead.',
-      '- **Stop rules (at every level):** the same error twice: change the approach (see "Recover"); a helper on one step for 5+ minutes: steer it or replace it; if the user set a budget: at 70% start wrapping up, at 100% start no new helpers, finish the piece in hand and report what is left.',
-      '- **Muka notes:** a note from the user or from Muka arrives after a tool result. Follow it and keep working; it needs no reply unless it asks for one.',
+      "- **Reuse before you spawn:** continue a helper that holds the context (SendMessage) rather than start one that re-reads it all. No helper for what about three tool calls of your own can do. Parallel only for independent work.",
+      '- **Briefs** name the exact files and what is already known. **Reports:** at most 150 words (Changed / Tested / Open issues); `Explore`: at most 100 words, file:line facts.',
+      '- **Advisor:** main session only; before a big or risky approach, once on an L plan, or when the same error comes twice. Helpers report a blocker.',
+      '- **Stop rules (every level):** same error twice: change the approach ("Recover"); a helper on one step 5+ minutes: steer or replace it; user budget: 70% wrap up, 100% no new helpers, report what is left.',
+      '- **Muka notes** arrive after a tool result: follow them, keep working, no reply unless one asks.',
     ].join('\n'),
   },
   {
     id: 'models',
     title: 'Models',
     when: 'always',
-    check: 'A helper started without a model is marked DEFAULT in the agents console, and its starter is told to name one.',
+    check: 'A helper started without a model is marked DEFAULT in the agents console, and its starter is told to name one; an Explore started on Opus or Fable brings a note that reading runs on Haiku.',
     text: [
       '## Models',
       '',
-      "You MUST pass `model` (and `effort`) on every Agent call; the agent definition's default is only a fallback. This rule is the user's explicit instruction to set them. Any model is allowed:",
+      "You MUST pass `model` (and `effort`) on every Agent call; the agent definition's default is only a fallback. This rule is the user's explicit instruction to set them. Any model is allowed: start at the cheapest that fits; step up one level only after a real shortfall.",
       '',
-      '- `opus` (or `fable`), `high` or `max`: planning an L task, hard debugging, the final review;',
-      '- `sonnet`, `medium` (`high` when tricky): routine implementation, tests, docs;',
-      '- `haiku`, `low`: reading, searching and lookups.',
-      '',
-      "Pay for strength where it changes the result; don't spend it on work a cheaper model does just as well.",
+      '- `haiku`, `low`: reading, searching and lookups;',
+      '- `sonnet`, `medium` (`high` when tricky): implementation, tests, docs;',
+      '- `opus` (or `fable`), `high` or `max`: only planning an L task, a bug sonnet cannot fix, and the final review of an L task.',
     ].join('\n'),
   },
   {
@@ -113,10 +113,9 @@ export const RULES: Rule[] = [
     text: [
       '## Sub-masters',
       '',
-      'Every helper is a sub-master: it may run its piece the way the master runs the task (size it, plan it in a few lines, start its own helpers, fit and test their work, report up), and its helpers may do the same, at any depth, under these same rules.',
+      'A helper may start its own helpers (size the piece, plan it in a few lines, fit and test their work, report up), at any depth, under these same rules, but only for an L piece whose parts have their own files; otherwise it does the piece itself.',
       '',
-      '- **Split only when it pays:** an M or L piece with parts that have their own files. Do an S piece yourself.',
-      '- **Keep each team small:** start the helpers the work needs, not more.',
+      '- **Keep each team small:** the helpers the work needs, not more.',
       '- **Reports stay at 150 words at every level.** Helpers never ask the user; they report the question up.',
     ].join('\n'),
   },
@@ -128,7 +127,7 @@ export const RULES: Rule[] = [
     text: [
       '## Verify before done',
       '',
-      'Never call work done on reading alone; prove it ran (the `verify` skill does this). After the last edit, run the tests that cover the change, the build and the linter, and for anything a person sees, the app itself (open it, click through the change, take a screenshot). Never edit a test, a check or its data to make it pass; a flaky test is fixed or removed, never retried until green. On an L task the `reviewer` tags findings **Important**, **Nit** or **Pre-existing**; fix the Important ones. Say how you verified it in the final message: what ran, and what was not checked.',
+      'Never call work done on reading alone; prove it ran (the `verify` skill does this). While working, run the targeted tests; once at the end, the full suite, the build and the linter, and for anything a person sees, the app itself (open it, click through, screenshot). Never edit a test, a check or its data to make it pass; a flaky test is fixed or removed, never retried until green. A `reviewer` only on L tasks; it tags findings **Important**, **Nit** or **Pre-existing**; fix the Important ones. Say how you verified it: what ran, and what was not checked.',
     ].join('\n'),
   },
   {
@@ -2065,6 +2064,7 @@ const stripAlt = (info: MainInfo, list: SubAgent[], budget: number | undefined, 
         `subagents ${c.finished}/${c.total} done`,
         info.ctxPercent !== undefined ? `context ${info.ctxPercent}%` : '',
         rate !== undefined ? `cache ${rate}%` : '',
+        cacheChip(info, now)?.text.toLowerCase().replace(' · ', ' ') ?? '',
       ]
         .filter(Boolean)
         .join('; '),
@@ -2076,6 +2076,22 @@ const stripAlt = (info: MainInfo, list: SubAgent[], budget: number | undefined, 
 /** The verified chip: green once checked, amber while a change is unchecked, none before any change. */
 export const verifyChip = (info: MainInfo): { text: string; hue: string } | undefined =>
   info.verify === 'verified' ? { text: '✓ VERIFIED', hue: H.green } : info.verify === 'unverified' ? { text: '⚠ UNVERIFIED', hue: H.amber } : undefined
+
+/** How long the prompt cache keeps what it holds, in minutes (/muka cache ttl N; kept in the store as 'cacheTtlMin'). */
+export const CACHE_TTL_DEFAULT = 60
+let cacheTtlMin = CACHE_TTL_DEFAULT
+
+/** Milliseconds the cache has left since Main's last request ended (negative once cold); undefined before the first turn. */
+export const cacheLeft = (info: MainInfo, now: number, ttlMin = cacheTtlMin): number | undefined =>
+  info.cacheEndAt === undefined ? undefined : info.cacheEndAt + ttlMin * 60_000 - now
+
+/** The HUD's cache chip: warm with the minutes left (amber under 10), cold past the TTL, nothing before the first turn. */
+export const cacheChip = (info: MainInfo, now: number, ttlMin = cacheTtlMin): { text: string; hue: string } | undefined => {
+  const left = cacheLeft(info, now, ttlMin)
+  if (left === undefined) return undefined
+  if (left <= 0) return { text: 'CACHE COLD', hue: H.mute }
+  return { text: `CACHE WARM · ${Math.ceil(left / 60_000)}m`, hue: left < 10 * 60_000 ? H.amber : H.green }
+}
 
 /** The HUD's prompt line, "builder :: Edit mailer.ts": who works and on what; stuck or idle otherwise. */
 export const hudLine = (info: MainInfo, list: SubAgent[], now = Date.now()): { text: string; isStuck: boolean; isIdle: boolean } => {
@@ -2193,6 +2209,14 @@ const stripBody = (info: MainInfo, list: SubAgent[], budget: number | undefined,
   const label = p ? `PLAN ${p.done}/${p.total}${p.done === p.total ? ' ✓ · DONE' : p.current ? ` · NOW: ${p.current}` : ''}` : 'NO TASK LIST'
   parts.push(`<text x="18" y="${y}" class="hl">${xml(clip(label.toUpperCase(), right ? 30 : 44))}</text>`)
   if (right) parts.push(`<text x="${W - 18}" y="${y}" class="hl" text-anchor="end">${xml(right)}</text>`)
+  // After the first turn: the prompt cache's clock, with the last turn's hit rate beside it.
+  const cc = cacheChip(info, now)
+  if (cc) {
+    y = 106
+    parts.push(hudChip(18, y, cc.text, cc.hue).svg)
+    const rate = cacheRate(info.usage)
+    if (rate !== undefined) parts.push(`<text x="${W - 18}" y="${y - 2}" class="hs" text-anchor="end">${rate}% cached last turn</text>`)
+  }
   return { parts: parts.join(''), height: y + 12, isStuck: hl.isStuck }
 }
 
@@ -3071,6 +3095,9 @@ export const pulseLine = (info: MainInfo, list: SubAgent[], notes: Notice[], rec
     const ctx = info.ctxPercent !== undefined ? `ctx ${info.ctxPercent}%` : ''
     return [who, money, ctx].filter(Boolean).join('   ')
   }
+  // Idle with the cache about to lapse: the next prompt would pay for a full re-read.
+  const cacheMs = cacheLeft(info, now)
+  if (cacheMs !== undefined && cacheMs > 0 && cacheMs < 5 * 60_000) return `cache expires in ${Math.ceil(cacheMs / 60_000)}m: a pause now costs a full re-read`
   if (info.verify === 'unverified') return '⚠ changes not verified yet'
   if (recap) return [`✓ done in ${duration(recap.durationMs)}`, recap.filesChanged > 0 ? plural(recap.filesChanged, 'file') : '', b ? usd(b.spent) : ''].filter(Boolean).join(' · ')
   return undefined
@@ -3190,7 +3217,71 @@ const pruneLog = async ($: EngineInterface): Promise<void> => {
   const oldest = dayKey(Date.now() - LOG_DAYS_KEPT * 24 * 3600 * 1000)
   for (const k of await $.store.keys()) {
     if (k.startsWith('log:') && k < oldest) await $.store.delete(k)
+    if (k.startsWith('use:') && k < oldest.replace(/^log:/, 'use:')) await $.store.delete(k)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Use counts for /muka audit: per day (and session), how often each tool
+// server, plugin skill and agent type was used. Kept LOG_DAYS_KEPT days.
+
+/** What a tool call is a use of: 'mcp:<server>' for a tool server's tool, 'skill:<plugin>:<skill>' for a plugin skill; undefined for anything else. */
+export const useOf = (tool: string, args: Record<string, unknown>): string | undefined => {
+  const m = /^mcp__(.+?)__/.exec(tool)
+  if (m) return `mcp:${m[1]}`
+  if (tool === 'Skill' && typeof args.skill === 'string' && /^[^:\s]+:[^:\s]+/.test(args.skill.trim())) return `skill:${args.skill.trim()}`
+  return undefined
+}
+
+/** One more use of `what` today, under this session's key. */
+const recordUse = async ($: EngineInterface, what: string): Promise<void> => {
+  const key = `${dayKey(Date.now()).replace(/^log:/, 'use:')}${sessionId}`
+  const cur = (await $.store.get(key)) as unknown
+  const counts: Record<string, number> = cur && typeof cur === 'object' && !Array.isArray(cur) ? { ...(cur as Record<string, number>) } : {}
+  counts[what] = (counts[what] ?? 0) + 1
+  await $.store.set(key, counts)
+}
+
+/** Every recorded use, summed over the kept days, and how many distinct days hold any. */
+const readUse = async ($: EngineInterface): Promise<{ counts: Record<string, number>; days: number }> => {
+  const keys = (await $.store.keys()).filter(k => k.startsWith('use:'))
+  const counts: Record<string, number> = {}
+  for (const k of keys) {
+    const v = (await $.store.get(k)) as unknown
+    if (v && typeof v === 'object' && !Array.isArray(v)) addTo(counts, v as Record<string, number>)
+  }
+  return { counts, days: new Set(keys.map(k => k.slice(4, 14))).size }
+}
+
+/** How often a plugin's tool servers, skills and agents were used: the sum over the recorded counts that belong to it. */
+export const pluginUses = (name: string, counts: Record<string, number>): number =>
+  Object.entries(counts).reduce((n, [k, v]) => {
+    const mine = k.startsWith('mcp:') ? k.slice(4) === name || k.slice(4).startsWith(`plugin_${name}_`) : k.startsWith(`skill:${name}:`) || k.startsWith(`agent:${name}:`)
+    return mine ? n + v : n
+  }, 0)
+
+/**
+ * /muka audit: which enabled plugins went unused in the tracked days, and the
+ * most used ones. `plugins` are the enabled plugin names (without @marketplace).
+ */
+export const auditReport = (plugins: string[], counts: Record<string, number>, days: number): string => {
+  const how = 'To turn a plugin off: `claude plugin disable <name>`. Muka never changes your settings.'
+  if (plugins.length === 0) return `Muka audit: no enabled plugins found in your settings.\n${how}`
+  if (days === 0) {
+    return `Muka audit: ${plural(plugins.length, 'plugin')} enabled, but Muka has not recorded any use yet. It counts tool-server calls, plugin skills and agent types per day (${LOG_DAYS_KEPT} days kept); run /muka audit again after a few sessions.\n${how}`
+  }
+  const used = plugins.map(p => ({ p, n: pluginUses(p, counts) }))
+  const never = used.filter(u => u.n === 0).map(u => u.p)
+  const top = used.filter(u => u.n > 0).sort((a, b) => b.n - a.n).slice(0, 5)
+  return [
+    `Muka audit: ${never.length} of ${plugins.length} enabled plugins have no recorded use in the ${plural(days, 'tracked day')}.`,
+    never.length > 0 ? `No use:\n${never.map(p => `- ${p}`).join('\n')}` : 'Every enabled plugin was used.',
+    top.length > 0 ? `Most used:\n${top.map(u => `- ${u.p} · ${plural(u.n, 'use')}`).join('\n')}` : '',
+    'Plugins that only add commands, hooks or a status line show no use here.',
+    how,
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 const setStatusOf = async ($: EngineInterface, id: string, status: SubAgentStatus, usage?: Usage): Promise<void> => {
@@ -3422,7 +3513,9 @@ const startTicker = ($: EngineInterface): void => {
       try {
         const info = await read($, main)
         const list = await read($, agents)
-        if (isOn && (info.isWorking || list.some(a => a.status === 'running'))) {
+        // Also while the cache clock runs (and one tick past its end), so the chip and the pulse keep up.
+        const cacheMs = cacheLeft(info, Date.now())
+        if (isOn && (info.isWorking || list.some(a => a.status === 'running') || (cacheMs !== undefined && cacheMs > -60_000))) {
           await update($, tick, n => n + 1)
           // The pulse's stuck warning and clock move with the tick too.
           await refreshStatus($)
@@ -3559,13 +3652,21 @@ let nudgesOn = true
 /** A shell command that tests, builds or lints. */
 const CHECK_COMMAND = /\b(test|tests|vitest|jest|pytest|cargo test|go test|npm run (test|build|lint|check|typecheck)|pnpm|yarn (test|build|lint)|tsc|eslint|build|lint|playwright|cypress)\b/i
 
+/** A file under a temp or scratchpad folder: it never counts as a change to verify. */
+export const isScratchPath = (path: string): boolean => /\/temp\/|\/tmp\/|scratchpad/i.test(path.replace(/\\/g, '/'))
+
 /**
  * What a finished, successful tool call does to the prompt's verification:
  * 'edit' for a file change, 'check' for a test, build, lint or a look at the
  * running app, undefined for anything else.
  */
-export const verifyEffect = (tool: string, args: Record<string, unknown>): 'edit' | 'check' | undefined => {
-  if (tool === 'Edit' || tool === 'Write' || tool === 'NotebookEdit') return 'edit'
+export const verifyEffect = (tool: string, args: Record<string, unknown>, root?: string): 'edit' | 'check' | undefined => {
+  if (tool === 'Edit' || tool === 'Write' || tool === 'NotebookEdit') {
+    // Only a change inside the project needs verifying: a scratch or temp file, or one outside the project root, does not.
+    const path = typeof args.file_path === 'string' ? args.file_path : typeof args.notebook_path === 'string' ? args.notebook_path : undefined
+    if (path && (isScratchPath(path) || isOutside(path, root))) return undefined
+    return 'edit'
+  }
   if ((tool === 'Bash' || tool === 'PowerShell') && typeof args.command === 'string' && CHECK_COMMAND.test(args.command)) return 'check'
   if (/browser|screenshot|preview/i.test(tool)) return 'check'
   return undefined
@@ -3686,6 +3787,37 @@ let mainCalls = 0
 let sizeAsked = false
 /** Whether this prompt's unverified finish has been flagged already. */
 let verifyFlagged = false
+/** Whether the sizing tune has gone out in this conversation (it rides the first real prompt, not the rules block, which stays byte-identical for the cache). */
+let sizingSent = false
+/** The helper types already told "continue the finished one" this prompt (agent|type), and how many helpers Main started this prompt. */
+const reuseNoted = new Set<string>()
+let mainHelpers = 0
+let sizeRuleNoted = false
+
+/** The helpers rule's note: a finished helper of that type already holds the context. */
+export const reuseNote = (type: string): string =>
+  `Muka: a finished ${type} helper already has context on this; continue it with SendMessage instead of starting a new one, unless the work is unrelated.`
+
+/** The models rule's note to whoever starts an Explore on Opus or Fable. */
+export const exploreModelNote = (model: string): string =>
+  `Muka: Explore only reads, and reading runs on haiku (low effort), not ${model}. Start it on haiku next time.`
+
+/** The size rule's note for a helper beyond what the size allows, quoting the rule. */
+export const sizeHelperNote = (size: 'S' | 'M'): string =>
+  size === 'S'
+    ? 'Muka: you sized this task S, and the size rule says: "S: a few files and a clear change. Do it yourself and run the tests yourself. No helpers." Do it yourself, or say a new size.'
+    : 'Muka: you sized this task M, and the size rule says: "M: needs research or reading many files. At most two `Explore` helpers read; you build." This is the third helper: do the rest yourself, or say a new size.'
+
+/** A rule note for whoever started a helper: Main hears it on its next tool result, a helper on its own next step. */
+const tellStarter = async ($: EngineInterface, parentId: string | undefined, starter: string, text: string): Promise<void> => {
+  if (parentId === undefined) {
+    wasteState.pendingMain.push(text)
+    return
+  }
+  const at = Date.now()
+  const steerNote: SteerNote = { id: `rule-${at}-${++noticeSeq}`, text, to: parentId, toLabel: starter, at, from: 'muka' }
+  await update($, steer, l => [...l, steerNote].slice(-20))
+}
 
 // ---------------------------------------------------------------------------
 // Helper model guard: the rules' helper models, kept before a helper starts.
@@ -3727,9 +3859,9 @@ export const levelOf = (list: SubAgent[], parentId: string | undefined): number 
 export const helperBrief = (level: number): string =>
   [
     `Muka (the user's coordination rules), for this helper (level ${level}; the master is 0):`,
-    '- You are a sub-master: if your piece splits into independent parts with their own files (an M or L piece), plan it in a few lines, start helpers of your own (the Agent tool), fit and test their work, then report up. Your helpers may do the same. Do an S piece yourself.',
-    "- For each helper you start, set its model (haiku, sonnet, opus or fable) and effort (low to max) by what its part needs: haiku/low for reading and lookups, sonnet/medium for routine code, sonnet or opus/high for tricky work, opus or fable/high-max for hard reasoning. Pay for strength only where it changes the result.",
-    '- Briefs down are short (goal, files, done when). Your report is at most 150 words: Changed / Tested / Open issues. Never ask the user; report a question up.',
+    '- You are a sub-master: do the piece yourself. Start helpers of your own only for an L piece whose parts have their own files; then plan it in a few lines, fit and test their work, report up. Reuse (SendMessage) a helper that holds the context; none for what about three tool calls can do.',
+    '- Name model and effort on every helper: haiku/low reads; sonnet/medium builds (high when tricky); opus or fable (high/max) only for a bug sonnet cannot fix or an L plan or review. Start cheap, step up after a real shortfall.',
+    '- Briefs name the exact files and what is known. Report in at most 150 words: Changed / Tested / Open issues (Explore: 100 words, file:line facts). Never ask the user; report a question up.',
     '- The same error twice: change the approach. Keep tool output small (Grep, line ranges, trimmed logs).',
   ].join('\n')
 
@@ -3764,10 +3896,65 @@ export const contextNudgeAt = (
 export const contextNudge = (st: WasteState, percent: number | undefined, opts?: { early?: boolean; late?: boolean }): string | undefined =>
   contextNudgeAt(st, percent, opts)?.text
 
+// ---------------------------------------------------------------------------
+// The prompt cache: when Main's last request ended, and why a turn's cache hit
+// rate fell. Muka's own part is to keep the rules block byte-identical.
+
+/** A drop counts when the turn read at least this many input tokens and the rate fell at least this many points. */
+export const CACHE_DROP_MIN_INPUT = 20_000
+export const CACHE_DROP_POINTS = 30
+
+/** What Muka saw since the previous turn that could have emptied the cache. */
+const cacheSeen = { compacted: false, changed: false, gapMs: 0 }
+
+/** Whether a turn's cache rate fell enough, on enough input, to be called a drop. */
+export const isCacheDrop = (prev: number | undefined, now: number | undefined, inputTokens: number): boolean =>
+  prev !== undefined && now !== undefined && inputTokens >= CACHE_DROP_MIN_INPUT && prev - now >= CACHE_DROP_POINTS
+
+/** The likeliest cause of a cache drop, from what Muka saw since the previous turn. */
+export const cacheDropCause = (seen: { gapMs: number; ttlMin: number; modelChanged: boolean; compacted: boolean; changed: boolean }): string =>
+  seen.gapMs > seen.ttlMin * 60_000
+    ? `an idle gap (${duration(seen.gapMs)}) longer than the ${seen.ttlMin}-minute cache lifetime`
+    : seen.modelChanged
+      ? 'the model changed'
+      : seen.compacted
+        ? 'the context was compacted'
+        : seen.changed
+          ? 'a rule or setting was toggled, or plugins reloaded'
+          : 'unknown'
+
+/** The time now by the engine's clock (the real one outside tests). */
+const clockNow = async ($: EngineInterface): Promise<number> => Promise.resolve($.clock.now()).catch(() => Date.now())
+
+/** Main's last request ended now: the cache's clock starts over (at most one store write a 30 seconds while steps go by). */
+const markCacheEnd = async ($: EngineInterface, at: number, force = false): Promise<void> => {
+  const before = (await read($, main)).cacheEndAt
+  if (!force && before !== undefined && at - before < 30_000) return
+  await update($, main, m => ({ ...m, cacheEndAt: at }))
+}
+
+/** The text of /muka cache. */
+const cacheStatus = async ($: EngineInterface): Promise<string> => {
+  const info = await read($, main)
+  const left = cacheLeft(info, await clockNow($))
+  const rate = cacheRate(info.usage)
+  const state =
+    left === undefined
+      ? 'no turn yet, so no cache clock'
+      : left <= 0
+        ? `cold: it lapsed ${duration(-left)} ago`
+        : `warm: ${Math.ceil(left / 60_000)} of ${cacheTtlMin} minutes left`
+  return [
+    `Muka cache: ${state}. TTL ${cacheTtlMin} minutes (/muka cache ttl <minutes> to change it).`,
+    rate !== undefined ? `Last turn: ${rate}% of its input came from the cache.` : 'Last turn: no cache numbers yet.',
+  ].join('\n')
+}
+
 /** /muka smart on|off: the rules for new chats, and a note so this chat follows the change at once. */
 const setSmart = async ($: EngineInterface, want: boolean): Promise<{ text: string }> => {
   const was = isSmart
   isSmart = want
+  if (was !== want) cacheSeen.changed = true
   await $.store.set('smart', want)
   if (was !== want) {
     const note = want
@@ -3795,6 +3982,7 @@ export const setRules = async ($: EngineInterface, ids: readonly string[], want:
   const picked = RULES.filter(r => ids.includes(r.id))
   if (picked.length === 0) return { text: `Muka has no rule ${ids.join(', ')}. The rules: ${RULES.map(r => r.id).join(', ')}.` }
   const changed = picked.filter(r => rulesOff.includes(r.id) === want)
+  if (changed.length > 0) cacheSeen.changed = true
   applyRulesOff(want ? rulesOff.filter(id => !ids.includes(id)) : [...rulesOff, ...ids])
   await $.store.set('rulesOff', rulesOff)
   if (changed.length > 0 && isSmart) {
@@ -4149,6 +4337,33 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     const days = Math.min(LOG_DAYS_KEPT, Math.max(1, Number(words[1]) || 7))
     return { text: efficiencyReport(await readLogDays($, days), days) }
   }
+  if (words[0] === 'cache') {
+    if (words[1] === 'ttl') {
+      const n = Number(words[2])
+      if (!Number.isFinite(n) || n <= 0 || n > 1440) return { text: `Muka cache TTL is ${cacheTtlMin} minutes. Use /muka cache ttl 60 (minutes, up to 1440): 5 for the short cache, 60 for the long one.` }
+      cacheTtlMin = n
+      await $.store.set('cacheTtlMin', n)
+      await refreshStatus($)
+      return { text: `Muka cache TTL: ${n} minutes. The chip and the expiry warning count down from the end of Main's last request.` }
+    }
+    return { text: await cacheStatus($) }
+  }
+  if (words[0] === 'audit') {
+    let enabled: unknown
+    try {
+      enabled = await $.settings.read({ key: 'enabledPlugins' })
+    } catch {
+      return { text: 'Muka audit: could not read your enabled plugins from the settings.' }
+    }
+    const names =
+      enabled && typeof enabled === 'object' && !Array.isArray(enabled)
+        ? Object.entries(enabled as Record<string, unknown>)
+            .filter(([, on]) => Boolean(on))
+            .map(([k]) => (k.lastIndexOf('@') > 0 ? k.slice(0, k.lastIndexOf('@')) : k))
+        : []
+    const use = await readUse($).catch(() => ({ counts: {} as Record<string, number>, days: 0 }))
+    return { text: auditReport(names, use.counts, use.days) }
+  }
   if (words[0] === 'models') {
     const want = words[1] === 'on' ? true : words[1] === 'off' ? false : !modelGuardOn
     modelGuardOn = want
@@ -4217,7 +4432,7 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'muka',
-      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday]',
+      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday], /muka cache [ttl N], /muka audit',
     })
     // On in every chat unless /savvy off turned it off; the delete guard is off
     // (it never asks) unless /savvy guard on turned it on.
@@ -4236,6 +4451,15 @@ export const register: Register = on => {
     sizeAsked = false
     verifyFlagged = false
     largeSent = false
+    sizingSent = false
+    reuseNoted.clear()
+    mainHelpers = 0
+    sizeRuleNoted = false
+    // The prompt cache: a session.start that finds a turn already behind it is a reload (or a toggle) that may have changed the prompt prefix.
+    const storedTtl = await $.store.get('cacheTtlMin').catch(() => undefined)
+    cacheTtlMin = typeof storedTtl === 'number' && storedTtl > 0 ? storedTtl : CACHE_TTL_DEFAULT
+    cacheSeen.compacted = false
+    cacheSeen.changed = (await read($, main)).cacheEndAt !== undefined
     Object.assign(wasteState, newWasteState())
     const storedBudget = await $.store.get('budget').catch(() => undefined)
     defaultBudget = storedBudget === null ? undefined : typeof storedBudget === 'number' && storedBudget > 0 ? storedBudget : undefined
@@ -4261,14 +4485,12 @@ export const register: Register = on => {
   on('prompt.context', async ($, e, next) => {
     const smart = (await $.store.get('smart').catch(() => undefined)) !== false
     if (!smart) return next(e)
-    // Only the rules switched on; the sizing tune belongs to the size rule.
+    // Only the rules switched on, and nothing else: the block is byte-identical
+    // in every chat while the same rules are on, so the prompt cache can reuse
+    // it. (The sizing tune rides the first prompt instead, see prompt.submit.)
     const storedOff = await $.store.get('rulesOff').catch(() => undefined)
     const off = Array.isArray(storedOff) ? storedOff.filter((x): x is string => typeof x === 'string') : rulesOff
-    const core = coreText(off)
-    const tune = off.includes('size') ? '' : (sizingNote(await readLogDays($, 7).catch(() => [])) ?? '')
-    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: tune ? `${core}
-
-${tune}` : core }] })
+    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: coreText(off) }] })
   })
 
   // A prompt that looks large brings the full large-task steps with it, once
@@ -4278,6 +4500,14 @@ ${tune}` : core }] })
     try {
       if (e.command === undefined && e.isMeta !== true) {
         const extra = pendingPrompt.splice(0)
+        // The sizing tune, once per conversation, on the first real prompt (after the rules block, which it must not change).
+        if (!sizingSent && isSmart) {
+          sizingSent = true
+          if (ruleOn('size')) {
+            const tune = sizingNote(await readLogDays($, 7).catch(() => []))
+            if (tune) extra.push(tune)
+          }
+        }
         if (ruleOn('large') && !largeSent && looksLarge(e.text)) {
           largeSent = true
           extra.push(`Muka: this looks like a large task. The full steps from the coordination rules:
@@ -4347,6 +4577,35 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         if ((typeof effort === 'string' && effort.trim()) || typeof effort === 'number') agent.effort = clean(String(effort))
         if (guarded) promptStats.guarded += 1
         if (guarded) await addNotice($, 'waste', agent.type, `asked for ${guarded}, ran on ${call.model} (the rules' model for ${agent.type})`)
+        await recordUse($, `agent:${e.subagentType}`).catch(() => undefined)
+        // Rule checks on how a helper is started (a fork is a clone of its starter, not a helper).
+        if (e.subagentType !== 'fork') {
+          const existing = await read($, agents)
+          const starter = e.parentAgentId === undefined ? 'Main' : agentLabel(existing, e.parentAgentId)
+          // helpers: a finished helper of this type already holds the context.
+          const reuseKey = `${e.parentAgentId ?? 'main'}|${e.subagentType}`
+          if (ruleOn('helpers') && !reuseNoted.has(reuseKey) && existing.some(a => a.type === agent.type && a.status === 'done' && a.parentId === e.parentAgentId)) {
+            reuseNoted.add(reuseKey)
+            await tellStarter($, e.parentAgentId, starter, reuseNote(agent.type))
+            await ruleHit($, 'helpers', starter, `${agent.type} started while a finished one already has the context`)
+          }
+          // size: a helper beyond what the size allows (Main's own, once per prompt).
+          if (e.parentAgentId === undefined) {
+            mainHelpers += 1
+            const size = promptStats.size
+            if (ruleOn('size') && !sizeRuleNoted && (size === 'S' || (size === 'M' && mainHelpers >= 3))) {
+              sizeRuleNoted = true
+              await tellStarter($, undefined, starter, sizeHelperNote(size))
+              await ruleHit($, 'size', 'Main', `a helper started on a task sized ${size}${size === 'M' ? ' (the third)' : ''}`)
+            }
+          }
+          // models: reading never needs Opus or Fable.
+          const asked = family(e.model)
+          if (ruleOn('models') && e.subagentType === 'Explore' && (asked === 'opus' || asked === 'fable')) {
+            await tellStarter($, e.parentAgentId, starter, exploreModelNote(asked))
+            await ruleHit($, 'models', starter, `Explore started on ${asked}: reading runs on haiku`)
+          }
+        }
         // The models rule: a helper started without naming a model runs on its
         // default; it is marked, and whoever started it hears so at its next step.
         if (ruleOn('models') && e.subagentType !== 'fork') {
@@ -4394,6 +4653,13 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       // Recording is best effort; the call goes on untouched.
     }
     const ran = await next(e)
+    // For /muka audit: one more use of this tool server or plugin skill.
+    try {
+      const used = ran.deny === undefined && !isGuardQuestion && !isOwnPush ? useOf(e.tool, args) : undefined
+      if (used) await recordUse($, used)
+    } catch {
+      // Best effort.
+    }
     // A note sent from the Steer tab rides on this result: the agent reads it
     // at once and keeps working, with nothing interrupted.
     let out = ran
@@ -4453,7 +4719,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       } else {
         const path = str(args.file_path) ?? str(args.notebook_path)
         // Did this prompt's last file change get tested, built or looked at?
-        const effect = verifyEffect(e.tool, args)
+        const effect = verifyEffect(e.tool, args, projectRoot)
         if (effect) {
           const before = (await read($, main)).verify
           const after = nextVerify(before, effect)
@@ -4530,6 +4796,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         const size = sizeIn(step.answer)
         if (size) promptStats.size = size
       }
+      // Main's request just ended: the prompt cache's clock starts over.
+      if (e.agentId === undefined) await markCacheEnd($, await clockNow($))
     } catch {
       // Best effort: the step passes as it came.
     }
@@ -4538,6 +4806,15 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
 
   on('turn.start', async ($, e, next) => {
     const started = await next(e)
+    // How long Main sat idle since its last request ended: the cache-drop alert's first suspect.
+    if (e.agentId === undefined) {
+      try {
+        const ended = (await read($, main)).cacheEndAt
+        cacheSeen.gapMs = ended === undefined ? 0 : Math.max(0, (await clockNow($)) - ended)
+      } catch {
+        cacheSeen.gapMs = 0
+      }
+    }
     if (e.agentId !== undefined) {
       // A subagent woken again (a follow-up message) is running again.
       await setStatusOf($, e.agentId, 'running')
@@ -4553,6 +4830,9 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       mainCalls = 0
       sizeAsked = false
       verifyFlagged = false
+      reuseNoted.clear()
+      mainHelpers = 0
+      sizeRuleNoted = false
       const prompt = clip(clean(e.text), 120)
       await update($, main, m => ({ ...m, current: undefined, isWorking: true, stepCount: 0, turnStartedAt: Date.now(), turnEndedAt: undefined, prompt, promptCostStart: m.costUsd ?? 0, promptBudget: undefined, budgetStage: 0, verify: undefined }))
     } else {
@@ -4579,6 +4859,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       const model = e.usage?.model
       const f = family(model)
       const spent = estimateUsd(usage, model)
+      // What the previous turn left (its model and cache rate), for the cache-drop check below.
+      const prior = await read($, main)
       await update($, main, m => ({
         ...m,
         ...(model ? { model } : {}),
@@ -4587,6 +4869,26 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         turnEndedAt: Date.now(),
         spendByModel: f && spent > 0 ? { ...(m.spendByModel ?? {}), [f]: (m.spendByModel?.[f] ?? 0) + spent } : m.spendByModel,
       }))
+      // The prompt cache: its clock starts over here; a big fall in the hit rate is told with its likeliest cause.
+      try {
+        await markCacheEnd($, await clockNow($), true)
+        const curRate = cacheRate(usage)
+        const prevRate = cacheRate(prior.usage)
+        const input = usage ? usage.input + usage.cacheRead + usage.cacheWrite : 0
+        if (e.reason !== 'aborted' && isCacheDrop(prevRate, curRate, input)) {
+          const cause = cacheDropCause({
+            gapMs: cacheSeen.gapMs,
+            ttlMin: cacheTtlMin,
+            modelChanged: prior.model !== undefined && model !== undefined && prior.model !== model,
+            compacted: cacheSeen.compacted,
+            changed: cacheSeen.changed,
+          })
+          await ruleHit($, 'context', 'Main', `cache dropped ${prevRate}% → ${curRate}%: ${cause}`)
+        }
+        if (e.reason !== 'aborted') Object.assign(cacheSeen, { compacted: false, changed: false, gapMs: 0 })
+      } catch {
+        // Best effort.
+      }
       // The automatic recap of the turn that just ended.
       const list = await read($, agents)
       const info = await read($, main)
@@ -4661,6 +4963,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       if (lastCtx - ctx.percent >= 25) {
         // Compacted: what was read is gone from the context, so reading it again is right.
         largeSent = false
+        sizingSent = false
+        cacheSeen.compacted = true
         wasteState.reads.clear()
       }
       lastCtx = ctx.percent

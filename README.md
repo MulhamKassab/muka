@@ -51,6 +51,8 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka motion on` / `/muka motion off` | The panel's animations (on by default; also ✨ Motion on the Bridge) |
 | `/muka recap` / `/muka recap yesterday` | The day's finished prompts |
 | `/muka report` / `/muka report 14` | Efficiency over the last 7 (or up to 14) days, with suggestions |
+| `/muka cache` / `/muka cache ttl 5` | The prompt cache: TTL, minutes left and the last turn's hit rate; set the TTL in minutes (60 by default) |
+| `/muka audit` | Enabled plugins with no recorded use, and the most used ones (never changes your settings) |
 | `/muka nudges on` / `/muka nudges off` | Tell the agent about waste as it happens (on by default) |
 | `/muka models on` / `/muka models off` | Stop clear model waste for helpers (off by default) |
 | `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
@@ -59,11 +61,12 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 
 While smart is on, Muka adds the coordination rules to every new chat, the same way CLAUDE.md is read. Switching it on or off also sends the current chat a note, so the change applies from your next message. The rules:
 
-- **Size every task first:** S (do it yourself), M (Haiku `Explore` helpers read, you build), L (plan then swarm), careful mode (as L, plus your approval, tests first and the `checker`).
+- **Size every task first:** S (do it yourself, no helpers), M (at most two `Explore` helpers read, you build), L (plan then swarm), careful mode (as L, plus your approval, tests first and the `checker`).
 - **Plan then swarm** for large tasks: scout, a PLAN.md with pieces and interfaces, one `builder` per independent piece, fit, one review.
-- **Model and effort per helper:** the master, and every helper that starts its own, picks any model (Haiku, Sonnet, Opus or Fable) and any effort (low to max) by what the piece needs, at a sensible cost: Haiku/low for reading and lookups, Sonnet/medium for routine code, Sonnet or Opus/high for tricky work, Opus or Fable/high-max for hard reasoning the result depends on.
-- **Sub-masters, at any depth:** every helper may run its piece like the master (plan it, start its own helpers, fit and test, report up), and its helpers may do the same. To keep usage sensible: split only M or L pieces, keep each team small, and keep reports to 150 words at every level.
-- **Reports and the advisor:** reports of 150 words at most; the advisor once per large plan or when an error repeats (main session only).
+- **Model and effort per helper:** every Agent call names a model and an effort. Any model is allowed, but start at the cheapest that fits and step up one level only after a real shortfall: Haiku/low for reading and lookups, Sonnet/medium for implementation, tests and docs (high when tricky), Opus or Fable (high/max) only for planning an L task, a bug Sonnet cannot fix, and the final review of an L task.
+- **Sub-masters, at any depth:** a helper may start its own helpers (plan, fit and test, report up), and so may theirs, but only for an L piece whose parts have their own files; otherwise it does the piece itself. Keep each team small and reports to 150 words at every level.
+- **Reuse before you spawn:** continue a helper that already holds the context (SendMessage) instead of starting one that re-reads everything; no helper for what about three tool calls can do; briefs name the exact files and what is known; `Explore` answers in 100 words with file:line facts; parallel only for independent work.
+- **Reports and the advisor:** reports of 150 words at most (`Explore`: 100); the advisor once per large plan or when an error repeats (main session only).
 - **Stop rules:** a stuck helper is steered or replaced; a budget, if you set one, wraps up at 70% and stops at 100%.
 - **Questions:** one option marked recommended; if you're away it goes ahead with it, except for deleting, spending or sending.
 
@@ -75,19 +78,28 @@ The rules are a registry of nine separate rules. Each one can be switched on or 
 
 | Id | Rule | How Muka checks it |
 |---|---|---|
-| `size` | Size every task first (S, M, L, careful mode) | If Main's third tool call of a prompt comes with no "Size:" line, one note asks for it |
+| `size` | Size every task first (S: no helpers; M: at most two `Explore`; L: the team; careful mode) | If Main's third tool call of a prompt comes with no "Size:" line, one note asks for it; a helper started on a task sized S, or a third on one sized M, brings one note quoting the rule |
 | `large` | Large tasks: plan, then swarm (sent only with prompts that look large; every chat gets a one-paragraph summary) | Not checked |
-| `helpers` | Helpers: short briefs and reports, the advisor, stop rules, Muka notes | Not checked |
-| `models` | Models: name `model` and `effort` on every Agent call; Opus or Fable for planning an L task, hard debugging and the final review, Sonnet for routine code, Haiku for reading | A helper started without a model is marked **DEFAULT** (amber) in the agents console, and whoever started it is told at its next step |
-| `submasters` | Sub-masters: every helper may run its piece like the master, at any depth (also the brief added to a helper that writes code) | Not checked |
-| `verify` | Verify before done: run the tests, build, linter and app; never edit a check to pass; say what ran | A turn that changed files and ran no test, build, lint or app check is flagged in Alerts with a toast, and your next prompt carries a note asking Claude to verify first |
-| `context` | Context: at about 50% full, finish the piece and `/compact`; a fresh chat for an unrelated task; big reading to a helper | At 50% full Main is told, once per climb, on its next tool result (the 70% waste nudge stays) |
+| `helpers` | Helpers: reuse before you spawn, briefs that name the files, short reports, the advisor, stop rules, Muka notes | Starting a helper of a type while a finished one of that type from this prompt exists brings one note per type: continue it with SendMessage |
+| `models` | Models: name `model` and `effort` on every Agent call; start at the cheapest that fits, step up after a real shortfall (Haiku reads, Sonnet builds, Opus or Fable only for an L plan, a bug Sonnet cannot fix and the final L review) | A helper started without a model is marked **DEFAULT** (amber) in the agents console, and whoever started it is told at its next step; an `Explore` started on Opus or Fable brings a note that reading runs on Haiku (the model is left alone; the model guard moves it when on) |
+| `submasters` | Sub-masters: a helper may start helpers at any depth, but only for an L piece whose parts have their own files (also the brief added to a helper that writes code) | Not checked |
+| `verify` | Verify before done: targeted tests while working, the full suite once at the end, build, linter and app; a `reviewer` only on L tasks; never edit a check to pass; say what ran | A turn that changed files inside the project and ran no test, build, lint or app check is flagged in Alerts with a toast, and your next prompt carries a note asking Claude to verify first (edits under a temp or scratchpad folder, or outside the project, never count) |
+| `context` | Context: at about 50% full, finish the piece and `/compact`; a fresh chat for an unrelated task; big reading to a helper | At 50% full Main is told, once per climb, on its next tool result (the 70% waste nudge stays); a prompt-cache drop is also counted here (see Caching) |
 | `recover` | Recover: after two failed fixes of the same problem, go back to the last good state and try another way, or report the blocker | The second identical failure of a call brings this note (even with the waste nudges off) |
 | `questions` | Questions: one option marked recommended; go ahead with it when you're away, except for deleting, spending or sending | Not checked |
 
 Every check that fires is counted for the session and listed under ♻️ in ⚠️ Alerts.
 
 To switch a rule: `/muka rule verify off`, `/muka rule verify on`, or `/muka rule all on|off`; or open the 🧠 **Rules** tab in the panel, which shows each rule as a row (ON/OFF and "checked: n") with a button per rule plus **All on** and **All off**. The choice is kept across chats (store key `rulesOff`), and switching tells the current chat at once in one short note. A small chat gets no more rule text than before the rules were split.
+
+## Caching
+
+The prompt cache keeps what a chat has already read, so a turn pays for the new text only. It lapses after a while without a request (about an hour on the long cache, five minutes on the short one), and then the next turn pays for everything again. Muka helps in four ways:
+
+- **A stable rules block:** the `mukaRules` context block is byte-identical in every chat while the same rules are on. The sizing tune (when Claude keeps sizing too small) no longer rides in it; it goes once per conversation with the first real prompt instead.
+- **The cache clock:** Muka notes when Main's last request ended. The header shows a chip, `CACHE WARM · 42m` (green; amber under 10 minutes) or `CACHE COLD` (past the TTL), and nothing before the first turn. When idle with under 5 minutes left, the pulse line says `cache expires in Nm: a pause now costs a full re-read`. `/muka cache` shows the TTL, the minutes left and the last turn's hit rate; `/muka cache ttl 5` sets the TTL in minutes (store key `cacheTtlMin`, 60 by default).
+- **The drop alert:** when a turn read at least 20,000 input tokens and its cache rate fell 30 points or more below the previous turn's, Alerts shows `cache dropped NN% → MM%: <cause>`: an idle gap longer than the TTL, the model changed, the context was compacted, a rule or setting toggled or plugins reloaded, else unknown. It is counted under the `context` rule.
+- **`/muka audit`:** every plugin you leave enabled adds tool definitions and skill names to the front of every chat. Muka counts per day (store keys `use:`, 14 days) how often each tool server (`mcp__<server>__`), plugin skill (`<plugin>:<skill>`) and agent type was used. `/muka audit` lists the enabled plugins with no recorded use, the most used ones, and how to turn one off (`claude plugin disable <name>`). It only reads your settings and never changes them. A plugin that only adds commands or hooks shows no use here.
 
 ## Smarter work
 

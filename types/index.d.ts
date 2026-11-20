@@ -78,6 +78,8 @@ export type MainInfo = {
   budgetStage?: number
   /** This prompt's verification: 'unverified' after a file edit, 'verified' once tests, a build or a look at the app ran after it. Unset: no edit yet. */
   verify?: 'unverified' | 'verified'
+  /** When the main agent's last request ended (a turn or a step): the prompt cache's clock starts there. */
+  cacheEndAt?: number
 }
 
 /** One item of the main agent's task list. */
