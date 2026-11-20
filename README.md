@@ -56,7 +56,9 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka nudges on` / `/muka nudges off` | Tell the agent about waste as it happens (on by default) |
 | `/muka models on` / `/muka models off` | Stop clear model waste for helpers (off by default) |
 | `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
-| `/muka trim on` / `/muka trim off` / `/muka trim 12000` | Output trimming (off by default); the number sets the threshold in characters (1,000 to 200,000) |
+| `/muka trim auto` / `/muka trim on` / `/muka trim off` / `/muka trim 12000` | Output trimming (auto by default); the number sets the threshold in characters (1,000 to 200,000) |
+| `/muka caps` / `/muka caps hard on` / `/muka caps hard off` | The helper caps (numbers, soft or hard, this prompt's counts); hard refuses a helper over a cap |
+| `/muka depth <n>` / `/muka depth off` | How deep helpers may nest below the master (2 by default; `off` is no limit) |
 | `/muka context` | What filled Main's context: Muka's rules and notes, tool results by kind, the engine's total |
 | `/muka handoff` | Main writes `.claude/handoff.md` so a fresh chat can continue |
 | `/muka compact` | Hints Main to run `/compact` at its next step |
@@ -66,14 +68,42 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 
 While smart is on, Muka adds the coordination rules to every new chat, the same way CLAUDE.md is read. Switching it on or off also sends the current chat a note, so the change applies from your next message. The rules:
 
-- **Size every task first:** S (do it yourself, no helpers), M (at most two `Explore` helpers read, you build), L (plan then swarm), careful mode (as L, plus your approval, tests first and the `checker`).
-- **Plan then swarm** for large tasks: scout, a PLAN.md with pieces and interfaces, one `builder` per independent piece, fit, one review.
-- **Model and effort per helper:** every Agent call names a model and an effort. Any model is allowed, but start at the cheapest that fits and step up one level only after a real shortfall: Haiku/low for reading and lookups, Sonnet/medium for implementation, tests and docs (high when tricky), Opus or Fable (high/max) only for planning an L task, a bug Sonnet cannot fix, and the final review of an L task.
-- **Sub-masters, at any depth:** a helper may start its own helpers (plan, fit and test, report up), and so may theirs, but only for an L piece whose parts have their own files; otherwise it does the piece itself. Keep each team small and reports to 150 words at every level.
-- **Reuse before you spawn:** continue a helper that already holds the context (SendMessage) instead of starting one that re-reads everything; no helper for what about three tool calls can do; briefs name the exact files and what is known; `Explore` answers in 100 words with file:line facts; parallel only for independent work.
-- **Reports and the advisor:** reports of 150 words at most (`Explore`: 100); the advisor once per large plan or when an error repeats (main session only).
+- **Size every task first:** S (do it yourself, no helpers), M (at most 3 helpers, see the table below; you build), L (the team: at most 6 helpers, in waves of 3), careful mode (as L, plus your approval, tests first and the `checker`).
+- **Plan then swarm** for large tasks: scout, a PLAN.md with pieces and interfaces, one `builder` per independent piece (at most 3 per wave, 6 in all), fit, one `reviewer` (Opus, high).
+- **Helpers: which, when, how many:** a table of which helper to start for what, and how many (below). Helpers cost about 4x the tokens of doing the work yourself, so none is started where the table says none.
+- **Model and effort per helper:** every Agent call names a model and an effort; the table gives the default for each case, a step up one level only after a real shortfall, and any other model only when you ask for it.
+- **Sub-masters:** a helper starts its own helpers only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless you lift the limit (`/muka depth`); otherwise it does the piece itself. Reports of 150 words at every level.
+- **Reports and the advisor:** reports of 150 words at most; the advisor once per large plan or when an error repeats (main session only).
 - **Stop rules:** a stuck helper is steered or replaced; a budget, if you set one, wraps up at 70% and stops at 100%.
 - **Questions:** one option marked recommended; if you're away it goes ahead with it, except for deleting, spending or sending.
+
+### Which helper, when, how many
+
+| Situation | Helper | Model, effort | How many |
+|---|---|---|---|
+| A change in up to 3 files with the location known; one question over fewer than 10 files; dependent steps; edits to the same file; anything that needs back-and-forth | none: do it yourself | | 0 |
+| 10+ files to explore, or 2-3 independent questions | `Explore` | haiku, low | one per question, at most 3 at once |
+| Web or docs research | `Explore` | haiku, low (sonnet if it must weigh sources) | 1-2 |
+| 2+ independent pieces in different files, each about 10+ tool calls | `builder` | sonnet, medium | one per piece, 2 usual, at most 3 per wave |
+| A noisy run (full test suite, long logs) that should return a summary | `builder` as a runner | sonnet, low | 1 |
+| A bug that survived two fix attempts | a fresh `builder` with a full brief | opus, high | 1 |
+| The end of an L task | `reviewer` | opus, high | once |
+| Only when you ask, or in careful mode | `checker` | | once |
+| **Per prompt** | | | S 0, M at most 3, L at most 6 in waves of at most 3 |
+
+A brief gives the objective, the exact files, what is already known, done-when and the output format; the report back is at most 150 words. Reuse a helper that already has the context (SendMessage) before starting a new one, and never poll a helper.
+
+### Caps
+
+Muka checks the numbers when a helper starts (a `fork` is exempt):
+
+- **Per prompt**, for the helpers Main starts: S 0, M 3, L or unsized 6.
+- **Running at once** under the same parent: 3 (2 when the parent is a helper).
+- **Depth** (`/muka depth <n|off>`, 2 by default): helpers below the master. The helpers rule governs the first two caps and the sub-masters rule the depth; a rule that is off is not checked.
+
+By default the caps are **soft**: the helper starts, and its starter hears one note per cap kind per prompt (and Alerts lists it). With `/muka caps hard on` (store key `capsHard`; 🚧 Hard caps in the Menu) the helper is refused instead, with `Muka: <which cap>. <what to do instead>.` `/muka caps` prints the numbers, whether they are hard or soft, and this prompt's counts. Hits are counted under the `helpers` and `submasters` rules (`/muka rules`).
+
+Two more checks, under the `helpers` rule, each at most once per prompt: a **thin brief** (a code-writing helper's brief under 200 characters or with no file path or file name in it, or an `Explore` brief under 100 characters) brings `Muka: that brief is thin: ...` to whoever started it; a **long report** (a helper's answer over 8,000 characters) adds an Alerts line (`long report from builder: ~Nk tokens`) and tells Main to ask helpers for reports of at most 150 words.
 
 Every chat gets a short core of the rules; the full large-task steps join only when a prompt looks large (long, a list of parts, or words like "refactor" or "one by one"), once per conversation and again after a compaction.
 
@@ -83,11 +113,11 @@ The rules are a registry of nine separate rules. Each one can be switched on or 
 
 | Id | Rule | How Muka checks it |
 |---|---|---|
-| `size` | Size every task first (S: no helpers; M: at most two `Explore`; L: the team; careful mode) | If Main's third tool call of a prompt comes with no "Size:" line, one note asks for it; a helper started on a task sized S, or a third on one sized M, brings one note quoting the rule |
+| `size` | Size every task first (S: no helpers; M: at most 3; L: the team, at most 6; careful mode) | If Main's third tool call of a prompt comes with no "Size:" line, one note asks for it; a helper started on a task sized S, or a fourth on one sized M, brings one note quoting the rule |
 | `large` | Large tasks: plan, then swarm (sent only with prompts that look large; every chat gets a one-paragraph summary) | Not checked |
-| `helpers` | Helpers: reuse before you spawn, briefs that name the files, short reports, the advisor, stop rules, Muka notes | Starting a helper of a type while a finished one of that type from this prompt exists brings one note per type: continue it with SendMessage |
-| `models` | Models: name `model` and `effort` on every Agent call; start at the cheapest that fits, step up after a real shortfall (Haiku reads, Sonnet builds, Opus or Fable only for an L plan, a bug Sonnet cannot fix and the final L review) | A helper started without a model is marked **DEFAULT** (amber) in the agents console, and whoever started it is told at its next step; an `Explore` started on Opus or Fable brings a note that reading runs on Haiku (the model is left alone; the model guard moves it when on) |
-| `submasters` | Sub-masters: a helper may start helpers at any depth, but only for an L piece whose parts have their own files (also the brief added to a helper that writes code) | Not checked |
+| `helpers` | Helpers: which, when, how many (the table above, the brief, the 150-word report, the advisor, stop rules, Muka notes) | Starting a helper of a type while a finished one of that type from this prompt exists brings one note per type (continue it with SendMessage); a helper over a cap, a thin brief and a long report bring one note per prompt (see Caps); `/muka caps hard on` refuses a helper over a cap |
+| `models` | Models: name `model` and `effort` on every Agent call; the defaults per case are in the helper table, one step up only after a real shortfall, any other model only when you ask | A helper started without a model is marked **DEFAULT** (amber) in the agents console, and whoever started it is told at its next step; an `Explore` started on Opus or Fable brings a note that reading runs on Haiku (the model is left alone; the model guard moves it when on) |
+| `submasters` | Sub-masters: a helper starts helpers only for an L piece whose parts have their own files, at most 2 and two levels deep (also the brief added to a helper that writes code) | The depth cap (see Caps) |
 | `verify` | Verify before done: targeted tests while working, the full suite once at the end, build, linter and app; a `reviewer` only on L tasks; never edit a check to pass; say what ran | A turn that changed files inside the project and ran no test, build, lint or app check is flagged in Alerts with a toast, and your next prompt carries a note asking Claude to verify first (edits under a temp or scratchpad folder, or outside the project, never count) |
 | `context` | Context: at about 50% full, finish the piece and `/compact`; a fresh chat for an unrelated task; big reading to a helper | At 50% full Main is told, once per climb, on its next tool result (the 70% waste nudge stays); a prompt-cache drop is also counted here (see Caching) |
 | `recover` | Recover: after two failed fixes of the same problem, go back to the last good state and try another way, or report the blocker | The second identical failure of a call brings this note (even with the waste nudges off) |
@@ -103,12 +133,12 @@ The prompt cache keeps what a chat has already read, so a turn pays for the new 
 
 - **A stable rules block:** the `mukaRules` context block is byte-identical in every chat while the same rules are on. The sizing tune (when Claude keeps sizing too small) no longer rides in it; it goes once per conversation with the first real prompt instead.
 - **The cache clock:** Muka notes when Main's last request ended. The header shows a chip, `CACHE WARM · 42m` (green; amber under 10 minutes) or `CACHE COLD` (past the TTL), and nothing before the first turn. When idle with under 5 minutes left, the pulse line says `cache expires in Nm: a pause now costs a full re-read`. `/muka cache` shows the TTL, the minutes left and the last turn's hit rate; `/muka cache ttl 5` sets the TTL in minutes (store key `cacheTtlMin`, 60 by default).
-- **The drop alert:** when a turn read at least 20,000 input tokens and its cache rate fell 30 points or more below the previous turn's, Alerts shows `cache dropped NN% → MM%: <cause>`: an idle gap longer than the TTL, the model changed, the context was compacted, a rule or setting toggled or plugins reloaded, else unknown. It is counted under the `context` rule.
+- **The drop alert:** when a turn read at least 20,000 input tokens and its cache rate fell 30 points or more below the previous turn's, Alerts shows `cache dropped NN% → MM%: <cause>`: an idle gap longer than the TTL, the model changed, the effort changed, the context was compacted, a rule or setting toggled or plugins reloaded, else unknown. It is counted under the `context` rule.
 - **`/muka audit`:** every plugin you leave enabled adds tool definitions and skill names to the front of every chat. Muka counts per day (store keys `use:`, 14 days) how often each tool server (`mcp__<server>__`), plugin skill (`<plugin>:<skill>`) and agent type was used. `/muka audit` lists the enabled plugins with no recorded use, the most used ones, and how to turn one off (`claude plugin disable <name>`). It only reads your settings and never changes them. A plugin that only adds commands or hooks shows no use here.
 
 ## Saving tokens
 
-- **Output trimming (`/muka trim on`, off by default):** a successful `Bash` or `PowerShell` result longer than the threshold (12,000 characters; `/muka trim <chars>`) reaches the model as its first ~3,000 characters, every line that looks like an error (`error`, `fail`, `exception`, `warn`, `traceback`, `fatal`, `denied`, `not found`; at most 60, each clipped, deduped), its last ~3,000 characters, and one line saying how much was cut and where the full text is. The full text is saved under `~/.claude/muka-outputs/output-01.txt` to `output-30.txt` (the oldest is overwritten; the engine gives plugins no way to delete a file). Muka answers from its `tool.call` hook with `{ result }` in the tool's own output shape (`stdout`, `stderr`, ...), which the engine checks against the tool's schema. `Read`, `Grep`, `Edit`, agents and MCP tools are never trimmed, nor failed or backgrounded commands. Each trim adds an Alerts line (`trimmed Bash output: ~Nk tokens saved`), counts toward the prompt's `trimSavedTokens` in the log, and shows in `/muka report` as `Saved by Muka`.
+- **Output trimming (`/muka trim auto|on|off`, auto by default):** a successful `Bash` or `PowerShell` result is trimmed by mode. **auto** trims one over 20,000 characters always, and one over the threshold (12,000; `/muka trim <chars>`) once Main's context is at 40% or more (a helper's results always use the threshold); **on** trims over the threshold at any context; **off** never. A trimmed result reaches the model as its first ~3,000 characters, every line that looks like an error (`error`, `fail`, `exception`, `warn`, `traceback`, `fatal`, `denied`, `not found`; at most 60, each clipped, deduped), its last ~3,000 characters, and one line saying how much was cut and where the full text is. A stored `true` or `false` from an older version reads as on or off. The Menu and Bridge Trim button cycles auto, on, off. The full text is saved under `~/.claude/muka-outputs/output-01.txt` to `output-30.txt` (the oldest is overwritten; the engine gives plugins no way to delete a file). Muka answers from its `tool.call` hook with `{ result }` in the tool's own output shape (`stdout`, `stderr`, ...), which the engine checks against the tool's schema. `Read`, `Grep`, `Edit`, agents and MCP tools are never trimmed, nor failed or backgrounded commands. Each trim adds an Alerts line (`trimmed Bash output: ~Nk tokens saved`), counts toward the prompt's `trimSavedTokens` in the log, and shows in `/muka report` as `Saved by Muka`.
 - **Context breakdown (🧮 Context tab, `/muka context`):** a stacked bar and rows for what Muka can measure of Main's context this conversation: its rules and notes, and tool results by kind (Read, Bash/PowerShell, Grep/Glob, MCP, agents' reports, other), against the engine's own total. The rest is shown as `other (system prompt, tools, conversation)`: Muka does not see inside it. Counts are characters / 4, restart in a new chat, and reset when the context is compacted.
 - **Handoff (`/muka handoff`, 📝 Handoff on the Bridge and the Menu):** a note asks Main to write a handoff (goal, done, left, decisions, files, how to verify, 300 words) to `<project>/.claude/handoff.md` and to tell you to start a new chat and say "continue from .claude/handoff.md". Muka suggests it once, in Alerts and the pulse, when Main's chat passes 4 hours of turn time or 300 steps.
 - **Compact hint (`/muka compact`, 🗜 Compact hint in the Menu):** when a plan step finishes while the context is over 40%, Main is told that is a clean place to `/compact` (at most one hint every 20 minutes; off with nudges and the context rule off).
@@ -118,10 +148,10 @@ The prompt cache keeps what a chat has already read, so a turn pays for the new 
 
 The ☰ **Menu** tab (right after the Bridge, on every surface; `/muka menu` opens it) has a button for every command, in groups:
 
-- **Switches** (primary while on, the state in the label): Panel rules, Nudges, Model guard, Delete guard, Pings, Motion, Trim, and Budget cycle (off, $2, $5, $10).
+- **Switches** (primary while on, the state in the label): Panel rules, Nudges, Model guard, Delete guard, Pings, Motion, Trim (cycles auto, on, off), Hard caps, Depth (cycles 2, 3, no limit), and Budget cycle (off, $2, $5, $10).
 - **Views:** Rules, Context, Report, Alerts, Changes, Activity.
 - **Actions:** Wrap up all, Stop helpers, Verify, Handoff, Compact hint.
-- **Info:** Status, Cache, Audit, Recap today, Recap yesterday, Rules list. Their text prints in a result area under the buttons (with a Clear button).
+- **Info:** Status, Cache, Caps, Audit, Recap today, Recap yesterday, Rules list. Their text prints in a result area under the buttons (with a Clear button).
 - **Tools:** REA status, REA setup, REA doctor, Setup, Setup undo. REA setup and Setup undo need a second press within 10 seconds (the label reads `Press again to confirm`).
 
 The Bridge's Controls also carry a ✂️ Trim toggle and its Actions a 📝 Handoff button.
@@ -143,7 +173,7 @@ Muka does more than show the agents: it keeps them efficient.
 - **Agents** in `~/.claude/agents`: `Explore` (Haiku, read-only), `builder` (Sonnet), `reviewer` (Sonnet, read-only), `checker` (Opus, read-only, only on request).
 - **The `verify` skill** in `~/.claude/skills/verify/SKILL.md`: used before calling work done or committing. It finds the project's test, build, lint and run commands (package.json, Makefile, pyproject and the like, and the CI workflows), runs them, starts a web or desktop app and walks the changed path with the browser or computer tools (with a screenshot), never edits a test to pass, and ends with what ran and what was not checked.
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
-- **Settings** merged into `~/.claude/settings.json`: Sonnet as the main model, a 60-second question timeout, the advisor model, and push notifications. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
+- **Settings** merged into `~/.claude/settings.json`: Sonnet as the main model, a 60-second question timeout, the advisor model, push notifications, and `"autoCompactWindow": 200000` (the conversation compacts at 200,000 tokens instead of filling a larger window; Claude Code's `autoCompactWindow` setting, 100,000 or more, capped at the model's window). `autoCompactWindow` is added only when your settings have none: yours is never replaced, and setup's result says which. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
 - **[Modern Web Guidance](https://github.com/GoogleChrome/modern-web-guidance)**, Google Chrome's plugin of up-to-date web best practices (HTML, CSS, browser JavaScript, accessibility, performance): its marketplace and plugin are added to the settings, and the install prompt installs it.
 - **[REA, Reverse Engineer Anything](https://github.com/morluto/rea)**: tools for understanding how an app or feature works without its source code (native binaries, JavaScript and Electron apps, .NET assemblies, websites), with the evidence behind each finding. `/muka rea setup` installs or updates it for Claude Code in the background (REA's own setup, `npx rea-agents setup --client claude_code --yes`; a note says when it is done), `/muka rea` shows whether it is set up, and `/muka rea doctor` runs its checks. It needs Node.js 24.22.1 or newer (or 22.23.4+). Native-binary analysis can use Hopper, Ghidra, IDA or Kuna if you have one; JavaScript and web analysis needs none.
 
@@ -189,7 +219,7 @@ Muka runs inside Claude Code as a plugin. Everything it does:
 
 - **Network:** none. Muka makes no network calls of its own.
 - **Programs it runs:** only `npx rea-agents …`, and only when you type `/muka rea setup` or `/muka rea doctor`.
-- **Files it writes:** with `/muka trim on`, the full text of each trimmed output to `~/.claude/muka-outputs` (30 files, rotating). And only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify skill in `~/.claude/skills/verify`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
+- **Files it writes:** when output trimming applies (auto or on), the full text of each trimmed output to `~/.claude/muka-outputs` (30 files, rotating). And only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify skill in `~/.claude/skills/verify`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
 - **Files it reads:** your settings during setup, `~/.claude.json` and `~/.claude/skills` for `/muka rea`, and the files the agents change (to show their diffs).
 - **Model calls:** one, the 💡 Reflect review, and only when you press it.
 - **What it changes in a conversation:** the rules block at the start of a chat (while smart is on), short notes added after tool results (waste nudges, budget warnings, your steering notes), a short brief added to the task of a helper that writes code, a helper's model when you turn the model guard on, and a refused shell command when you turn the delete guard on and answer Block.

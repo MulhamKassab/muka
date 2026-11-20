@@ -42,16 +42,16 @@ export const RULES: Rule[] = [
     id: 'size',
     title: 'Size every task first',
     when: 'always',
-    check: "Main's third tool call of a prompt with no 'Size:' line brings one note asking for it; helpers beyond the size (any on S, a third on M) bring one note quoting the rule.",
+    check: "Main's third tool call of a prompt with no 'Size:' line brings one note asking for it; helpers beyond the size (any on S, a fourth on M) bring one note quoting the rule.",
     text: [
       '## Size every task first',
       '',
       'Before starting, decide the size and say it in one line (for example "Size: M").',
       '',
       '- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.',
-      '- **M**: needs research or reading many files. At most two `Explore` helpers read; you build.',
-      '- **L**: clearly more than about 20 tool calls, and it splits into pieces that can be built independently (different files or areas). Use the team: "Large tasks" below.',
-      '- **Careful mode**: only when the user says "careful mode", or for work on production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests are written first, and the `checker` runs at the end.',
+      '- **M**: needs research or reading many files. At most 3 helpers (see "Helpers"); you build.',
+      '- **L**: clearly more than about 20 tool calls, and it splits into independent pieces (different files or areas). The team, "Large tasks" below: at most 6 helpers, in waves of 3.',
+      '- **Careful mode**: only when the user says so, or for production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests come first, the `checker` runs at the end.',
     ].join('\n'),
   },
   {
@@ -68,27 +68,32 @@ export const RULES: Rule[] = [
       '   - the pieces, each with: Goal / May touch / Must not touch / Done when / Test command / Model and effort,',
       '   - the shared interfaces between pieces, fixed before anyone builds.',
       '   Consult the advisor once, on this plan.',
-      '3. **Build.** One `builder` per independent piece, on the model and effort its piece needs; in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see "Sub-masters"), at any depth.',
+      '3. **Build.** One `builder` per independent piece, at most 3 per wave and 6 in all, each on the model and effort its piece needs (see "Helpers"); in parallel only when their files do not overlap. Keep shared files and the interfaces between pieces for yourself. Give each builder its piece from PLAN.md as its brief. A piece that itself splits into independent parts may be run by its builder as a sub-master (see "Sub-masters").',
       '4. **Fit.** Read each report, check its diff, put the pieces together and run the full tests yourself.',
-      '5. **Review.** Run the `reviewer` once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.',
+      '5. **Review.** Run the `reviewer` (opus, high) once on the finished whole and fix what it finds. The `checker` only if the user asks, or in careful mode.',
       '6. **Keep PLAN.md current** (pieces done, decisions made) so nothing is lost or redone when the context is compacted.',
       '',
-      'Keep the team small: one or two builders is usual; more only when the pieces are truly separate.',
+      'Keep the team small: two builders is usual; a third only when the pieces are truly separate.',
     ].join('\n'),
   },
   {
     id: 'helpers',
-    title: 'Helpers',
+    title: 'Helpers: which, when, how many',
     when: 'always',
-    check: 'Starting a helper of a type while a finished one of that type from this prompt exists brings one note: continue it with SendMessage.',
+    check: 'Over a cap (helpers per prompt, running at once, a thin brief, a long report) or a helper started while a finished one of its type holds the context: one note per prompt; with /muka caps hard on, a helper over a cap is refused.',
     text: [
-      '## Helpers',
+      '## Helpers: which, when, how many',
       '',
-      "- **Reuse before you spawn:** continue a helper that holds the context (SendMessage) rather than start one that re-reads it all. No helper for what about three tool calls of your own can do. Parallel only for independent work.",
-      '- **Briefs** name the exact files and what is already known. **Reports:** at most 150 words (Changed / Tested / Open issues); `Explore`: at most 100 words, file:line facts.',
-      '- **Advisor:** main session only; before a big or risky approach, once on an L plan, or when the same error comes twice. Helpers report a blocker.',
-      '- **Stop rules (every level):** same error twice: change the approach ("Recover"); a helper on one step 5+ minutes: steer or replace it; user budget: 70% wrap up, 100% no new helpers, report what is left.',
-      '- **Muka notes** arrive after a tool result: follow them, keep working, no reply unless one asks.',
+      'Helpers cost about 4x the tokens of doing the work yourself, so start one only where this list says.',
+      '',
+      '- **None:** a change in up to 3 files with the location known; one question over fewer than 10 files; dependent steps; edits to the same file; anything that needs back-and-forth.',
+      '- **`Explore` (haiku, low):** 10+ files to explore, or 2-3 independent questions: one per question, at most 3 at once. Web or docs research: 1-2 (sonnet if it must weigh sources).',
+      '- **`builder` (sonnet, medium):** 2+ independent pieces in different files, each about 10+ tool calls: one per piece, 2 usual, at most 3 per wave. One `builder` (sonnet, low) as a runner for a noisy run (full test suite, long logs) that returns a summary.',
+      '- **One fresh `builder` (opus, high)** with a full brief for a bug that survived two fix attempts.',
+      '- **`reviewer` (opus, high):** once, at the end of an L task. **`checker`:** only when the user asks, or in careful mode.',
+      '- **Totals per prompt:** S 0, M at most 3, L at most 6 in waves of at most 3.',
+      '- **Brief:** the objective, the exact files, what is already known, done-when, the output format. **Report back:** at most 150 words. Reuse a helper that already has the context (SendMessage) before starting a new one; never poll a helper.',
+      '- **Advisor:** main session only, before a risky approach or when the same error comes twice. **Stop rules:** same error twice: change the approach; a helper 5+ minutes on one step: steer or replace it; user budget: 70% wrap up, 100% no new helpers. **Muka notes** (after a tool result): follow them, no reply.',
     ].join('\n'),
   },
   {
@@ -99,11 +104,11 @@ export const RULES: Rule[] = [
     text: [
       '## Models',
       '',
-      "You MUST pass `model` (and `effort`) on every Agent call; the agent definition's default is only a fallback. This rule is the user's explicit instruction to set them. Any model is allowed: start at the cheapest that fits; step up one level only after a real shortfall.",
+      "You MUST name `model` and `effort` on every Agent call; the agent definition's default is only a fallback. This rule is the user's explicit instruction to set them. Use the default for each case in \"Helpers\"; step up one level only after a real shortfall; any other model only when the user asks for it.",
       '',
-      '- `haiku`, `low`: reading, searching and lookups;',
-      '- `sonnet`, `medium` (`high` when tricky): implementation, tests, docs;',
-      '- `opus` (or `fable`), `high` or `max`: only planning an L task, a bug sonnet cannot fix, and the final review of an L task.',
+      '- `haiku`, `low`: reading and lookups;',
+      '- `sonnet`, `medium`: building, tests, docs;',
+      '- `opus`, `high`: the final review of an L task, a bug that survived two fix attempts.',
     ].join('\n'),
   },
   {
@@ -113,10 +118,10 @@ export const RULES: Rule[] = [
     text: [
       '## Sub-masters',
       '',
-      'A helper may start its own helpers (size the piece, plan it in a few lines, fit and test their work, report up), at any depth, under these same rules, but only for an L piece whose parts have their own files; otherwise it does the piece itself.',
+      'A helper starts its own helpers only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless the user lifts the limit; otherwise it does the piece itself.',
       '',
-      '- **Keep each team small:** the helpers the work needs, not more.',
-      '- **Reports stay at 150 words at every level.** Helpers never ask the user; they report the question up.',
+      '- It plans in a few lines, fits and tests their work, and reports up in at most 150 words.',
+      '- Helpers never ask the user; they report the question up.',
     ].join('\n'),
   },
   {
@@ -127,7 +132,7 @@ export const RULES: Rule[] = [
     text: [
       '## Verify before done',
       '',
-      'Never call work done on reading alone; prove it ran (the `verify` skill does this). While working, run the targeted tests; once at the end, the full suite, the build and the linter, and for anything a person sees, the app itself (open it, click through, screenshot). Never edit a test, a check or its data to make it pass; a flaky test is fixed or removed, never retried until green. A `reviewer` only on L tasks; it tags findings **Important**, **Nit** or **Pre-existing**; fix the Important ones. Say how you verified it: what ran, and what was not checked.',
+      'Never call work done on reading alone; prove it ran (the `verify` skill does this). While working, run the targeted tests; once at the end, the full suite, the build and the linter, and for anything a person sees, the app itself (open it, click through). Never edit a test or its data to make it pass; fix or remove a flaky test, never retry it until green. A `reviewer` only on L tasks; fix its **Important** findings. Say how you verified it: what ran, and what was not checked.',
     ].join('\n'),
   },
   {
@@ -159,14 +164,14 @@ export const RULES: Rule[] = [
     text: [
       '## Questions',
       '',
-      "When you ask the user a question, always mark one option \"(Recommended)\" and put it first. If the question closes without an answer (the user is away), go ahead with the recommended option, say in one line that you did, and keep working. Never do this for anything that deletes data, spends money, or sends or publishes something on the user's behalf: for those, stop and wait.",
+      "When you ask the user a question, always mark one option \"(Recommended)\" and put it first. If it closes unanswered (the user is away), go ahead with that option, say so in one line, and keep working. Never for anything that deletes data, spends money, or sends or publishes something for the user: then stop and wait.",
     ].join('\n'),
   },
 ]
 
 /** What every chat gets in place of the large-task steps, which join only a prompt that looks large. */
 export const LARGE_SUMMARY =
-  '## Large tasks\n\nFor an L task: scout with `Explore`, write PLAN.md (phases; pieces with Goal / May touch / Must not touch / Done when / Test command; the shared interfaces), one `builder` per independent piece, fit and test it yourself, then one `reviewer`. Muka adds the full steps to a prompt that looks large.'
+  '## Large tasks\n\nFor an L task: scout with `Explore`, write PLAN.md (phases, pieces with Goal / May touch / Must not touch / Done when / Test command, shared interfaces), one `builder` per independent piece (at most 3 per wave, 6 in all), fit and test it yourself, then one `reviewer`. Muka adds the full steps to a prompt that looks large.'
 
 const ruleIsOn = (off: readonly string[], id: string): boolean => !off.includes(id)
 
@@ -3775,8 +3780,35 @@ const TRIM_FILES = 30
 /** $.fs.write refuses more than 4 MiB; stay well under it (UTF-8 is up to 4 bytes a character). */
 const TRIM_SAVE_MAX = 1_000_000
 
-let trimOn = false
+/** Trim modes: auto (over 20,000 characters always; over the threshold once Main's context is 40% full, and always for a helper), on (over the threshold), off. */
+export type TrimMode = 'auto' | 'on' | 'off'
+/** Auto trims a result over this many characters whatever the context holds. */
+export const TRIM_AUTO_ALWAYS = 20_000
+/** Main's context percent from which auto trims at the threshold. */
+export const TRIM_AUTO_CTX = 40
+let trimMode: TrimMode = 'auto'
 let trimLimit = TRIM_DEFAULT
+
+/** The stored 'trim' value as a mode: an older boolean maps to on/off, nothing to auto. */
+export const trimModeOf = (stored: unknown): TrimMode => (stored === true || stored === 'on' ? 'on' : stored === false || stored === 'off' ? 'off' : 'auto')
+
+/** The next mode when a button is pressed: auto, on, off, auto. */
+export const nextTrimMode = (m: TrimMode): TrimMode => (m === 'auto' ? 'on' : m === 'on' ? 'off' : 'auto')
+
+/** The length over which a shell stream is trimmed now, or undefined when none is. `ctxPercent` is Main's; a helper (`isMain` false) always counts as full. */
+export const trimThreshold = (mode: TrimMode, limit: number, isMain: boolean, ctxPercent: number | undefined): number | undefined =>
+  mode === 'off' ? undefined : mode === 'on' ? limit : !isMain || (ctxPercent ?? 0) >= TRIM_AUTO_CTX ? Math.min(TRIM_AUTO_ALWAYS, limit) : TRIM_AUTO_ALWAYS
+
+/** The next depth limit when its button is pressed: 2, 3, no limit (shown as 'off'), 2. */
+export const nextDepth = (d: number): number | 'off' => (d === 2 ? 3 : d === 3 ? 'off' : 2)
+
+/** The trim mode as a sentence for the status and the command. */
+export const trimSentence = (mode: TrimMode, limit: number): string =>
+  mode === 'auto'
+    ? `auto: a shell result over ${TRIM_AUTO_ALWAYS} characters is trimmed; over ${limit} once Main's context is ${TRIM_AUTO_CTX}% full (a helper's always)`
+    : mode === 'on'
+      ? `on, over ${limit} characters`
+      : `off, over ${limit} characters when on`
 
 /**
  * Cuts a long output down: the first ~3,000 characters, every line of the cut
@@ -3827,16 +3859,18 @@ const saveFullOutput = async ($: EngineInterface, tool: string, text: string): P
 }
 
 /** A successful shell result with its long streams trimmed, and how many characters that kept out; undefined when nothing was trimmed. */
-const trimShellResult = async ($: EngineInterface, tool: string, result: unknown): Promise<{ result: Record<string, unknown>; saved: number } | undefined> => {
-  if (!trimOn || (tool !== 'Bash' && tool !== 'PowerShell') || !result || typeof result !== 'object') return undefined
+const trimShellResult = async ($: EngineInterface, tool: string, result: unknown, agentId?: string): Promise<{ result: Record<string, unknown>; saved: number } | undefined> => {
+  if (trimMode === 'off' || (tool !== 'Bash' && tool !== 'PowerShell') || !result || typeof result !== 'object') return undefined
+  const threshold = trimThreshold(trimMode, trimLimit, agentId === undefined, agentId === undefined ? (await read($, main)).ctxPercent : undefined)
+  if (threshold === undefined) return undefined
   const r = result as Record<string, unknown>
   if (r.isImage === true || typeof r.backgroundTaskId === 'string') return undefined
   const next: Record<string, unknown> = { ...r }
   let saved = 0
   for (const field of ['stdout', 'stderr'] as const) {
     const text = r[field]
-    if (typeof text !== 'string' || text.length <= trimLimit) continue
-    const short = trimOutput(text, trimLimit, await saveFullOutput($, tool, text))
+    if (typeof text !== 'string' || text.length <= threshold) continue
+    const short = trimOutput(text, threshold, await saveFullOutput($, tool, text))
     if (short.length >= text.length) continue
     next[field] = short
     saved += text.length - short.length
@@ -4081,7 +4115,114 @@ export const exploreModelNote = (model: string): string =>
 export const sizeHelperNote = (size: 'S' | 'M'): string =>
   size === 'S'
     ? 'Muka: you sized this task S, and the size rule says: "S: a few files and a clear change. Do it yourself and run the tests yourself. No helpers." Do it yourself, or say a new size.'
-    : 'Muka: you sized this task M, and the size rule says: "M: needs research or reading many files. At most two `Explore` helpers read; you build." This is the third helper: do the rest yourself, or say a new size.'
+    : 'Muka: you sized this task M, and the size rule says: "M: needs research or reading many files. At most 3 helpers (see "Helpers"); you build." This is the fourth helper: do the rest yourself, or say a new size.'
+
+// ---------------------------------------------------------------------------
+// Helper caps: how many helpers a prompt may start, how many run at once, and
+// how deep they nest. Soft (the default): the helper starts, with one notice
+// and one note per cap kind per prompt. Hard (/muka caps hard on): it is refused.
+
+export const CAP_RUNNING_MAIN = 3
+export const CAP_RUNNING_HELPER = 2
+export const DEPTH_DEFAULT = 2
+/** Whether a cap refuses (true) or only notes (false). */
+let capsHard = false
+/** The deepest helper level allowed (the master is 0); 0 means no limit. */
+let maxDepth = DEPTH_DEFAULT
+/** The cap notes already given this prompt (parent|kind). */
+const capNoted = new Set<string>()
+
+export type CapKind = 'total' | 'running' | 'depth'
+export type CapHit = { kind: CapKind; rule: 'helpers' | 'submasters'; text: string; advice: string }
+
+/** How many helpers Main may start in a prompt of this size: S 0, M 3, L or unsized 6. */
+export const totalCap = (size: 'S' | 'M' | 'L' | undefined): number => (size === 'S' ? 0 : size === 'M' ? 3 : 6)
+
+/**
+ * The first cap a helper start would break, or undefined. `started` is how many
+ * helpers Main started this prompt; `list` the agents; `parentId` the starter
+ * (undefined for Main). A fork is never checked (the caller skips it).
+ */
+export const capCheck = (a: {
+  list: SubAgent[]
+  parentId: string | undefined
+  size: 'S' | 'M' | 'L' | undefined
+  started: number
+  maxDepth: number
+  helpersOn: boolean
+  submastersOn: boolean
+}): CapHit | undefined => {
+  const level = levelOf(a.list, a.parentId)
+  if (a.submastersOn && a.maxDepth > 0 && level > a.maxDepth) {
+    return {
+      kind: 'depth',
+      rule: 'submasters',
+      text: `depth limit ${a.maxDepth}: this helper would sit at level ${level}`,
+      advice: 'Do the piece yourself; the user can lift the limit with /muka depth <n|off>',
+    }
+  }
+  if (!a.helpersOn) return undefined
+  if (a.parentId === undefined) {
+    const limit = totalCap(a.size)
+    if (a.started >= limit) {
+      return {
+        kind: 'total',
+        rule: 'helpers',
+        text: `helper cap for this prompt: ${a.started} started, the limit for a task sized ${a.size ?? 'L or unsized'} is ${limit}`,
+        advice: limit === 0 ? 'Do it yourself, or say a new size' : 'Do the rest yourself, or reuse a finished helper with SendMessage',
+      }
+    }
+  }
+  const running = a.list.filter(x => x.parentId === a.parentId && x.status === 'running' && x.type !== 'fork').length
+  const limit = a.parentId === undefined ? CAP_RUNNING_MAIN : CAP_RUNNING_HELPER
+  if (running >= limit) {
+    return {
+      kind: 'running',
+      rule: 'helpers',
+      text: `${running} helpers already running under ${a.parentId === undefined ? 'Main' : 'this helper'}, the limit is ${limit}`,
+      advice: 'Wait for one to finish, or reuse one with SendMessage',
+    }
+  }
+  return undefined
+}
+
+/** The text a refused helper start returns: "Muka: <which cap>. <what to do instead>." */
+export const capDeny = (hit: CapHit): string => `Muka: ${hit.text}. ${hit.advice}.`
+
+/** The note a helper started over a soft cap brings its starter. */
+export const capSoftNote = (hit: CapHit): string => `Muka: ${hit.text}. It started, but start no more: ${hit.advice.charAt(0).toLowerCase()}${hit.advice.slice(1)}.`
+
+/** The text of /muka caps: the numbers, hard or soft, and this prompt's counts. */
+export const capsText = (list: SubAgent[]): string => {
+  const running = (parent: string | undefined) => list.filter(x => x.parentId === parent && x.status === 'running' && x.type !== 'fork').length
+  const size = promptStats.size
+  return [
+    `Muka caps: ${capsHard ? 'hard (a helper over a cap is refused)' : 'soft (a helper over a cap starts, with one note per kind per prompt)'}.`,
+    `- Helpers per prompt: ${totalCap(size)} for a task sized ${size ?? 'L or unsized'} (S 0, M 3, L 6); started this prompt: ${mainHelpers}`,
+    `- Running at once: ${CAP_RUNNING_MAIN} under Main (${running(undefined)} now), ${CAP_RUNNING_HELPER} under a helper`,
+    `- Depth: ${maxDepth === 0 ? 'no limit' : `${maxDepth} level${maxDepth === 1 ? '' : 's'} below the master`}`,
+    `- Checks fired this session: helpers ${ruleHits.helpers ?? 0}, sub-masters ${ruleHits.submasters ?? 0}`,
+    'Change: /muka caps hard on|off, /muka depth <n|off>. The rules "Helpers" and "Sub-masters" switch their caps (/muka rule <id> off).',
+  ].join('\n')
+}
+
+/** The helpers rule's note for a thin brief. */
+export const THIN_BRIEF_NOTE = 'Muka: that brief is thin: name the objective, the exact files, what is already known, done-when and the output format.'
+
+/** The helpers rule's note to Main when a helper's report runs long. */
+export const LONG_REPORT_NOTE = 'Muka: ask helpers for reports of at most 150 words; long reports fill your context.'
+
+/** A report over this many characters is called long (about 2k tokens). */
+export const LONG_REPORT = 8_000
+
+/** Whether a helper's brief is too thin for what it is asked to do: code-writing helpers need 200+ characters and a file-like token; an Explore, 100+ characters. */
+export const isThinBrief = (type: string, prompt: string): boolean => {
+  const p = prompt.trim()
+  if (type === 'fork') return false
+  if (type === 'Explore') return p.length < 100
+  if (READERS.has(type)) return false
+  return p.length < 200 || !/[\\/]|\b[\w-]+\.[A-Za-z][A-Za-z0-9]{1,5}\b/.test(p)
+}
 
 /** A rule note for whoever started a helper: Main hears it on its next tool result, a helper on its own next step. */
 const tellStarter = async ($: EngineInterface, parentId: string | undefined, starter: string, text: string): Promise<void> => {
@@ -4134,10 +4275,10 @@ export const levelOf = (list: SubAgent[], parentId: string | undefined): number 
 export const helperBrief = (level: number): string =>
   [
     `Muka (the user's coordination rules), for this helper (level ${level}; the master is 0):`,
-    '- You are a sub-master: do the piece yourself. Start helpers of your own only for an L piece whose parts have their own files; then plan it in a few lines, fit and test their work, report up. Reuse (SendMessage) a helper that holds the context; none for what about three tool calls can do.',
-    '- Name model and effort on every helper: haiku/low reads; sonnet/medium builds (high when tricky); opus or fable (high/max) only for a bug sonnet cannot fix or an L plan or review. Start cheap, step up after a real shortfall.',
-    '- Briefs name the exact files and what is known. Report in at most 150 words: Changed / Tested / Open issues (Explore: 100 words, file:line facts). Never ask the user; report a question up.',
-    '- The same error twice: change the approach. Keep tool output small (Grep, line ranges, trimmed logs).',
+    '- You are a sub-master: do the piece yourself. Start helpers only for an L piece whose parts have their own files: at most 2, and at most two levels below the master. Plan it in a few lines, fit and test their work. Reuse (SendMessage) a helper that holds the context; none for a change in up to 3 files with a known location.',
+    '- Name model and effort on every helper: Explore haiku/low; builder sonnet/medium; opus/high only for a bug that survived two fixes or an L review. Step up one level only after a real shortfall.',
+    '- Brief: the objective, the exact files, what is known, done-when, the output format. Report in at most 150 words: Changed / Tested / Open issues. Never ask the user; report a question up.',
+    '- The same error twice: change the approach. Keep tool output small (Grep, line ranges).',
   ].join('\n')
 
 /**
@@ -4180,7 +4321,9 @@ export const CACHE_DROP_MIN_INPUT = 20_000
 export const CACHE_DROP_POINTS = 30
 
 /** What Muka saw since the previous turn that could have emptied the cache. */
-const cacheSeen = { compacted: false, changed: false, gapMs: 0, tools: '' }
+const cacheSeen = { compacted: false, changed: false, gapMs: 0, tools: '', effortChanged: false }
+/** Main's effort as of its last request (for the cache-drop cause). */
+const effortSeen: { last?: string } = {}
 
 /** Whether a turn's cache rate fell enough, on enough input, to be called a drop. */
 export const isCacheDrop = (prev: number | undefined, now: number | undefined, inputTokens: number): boolean =>
@@ -4191,13 +4334,15 @@ export const isCacheDrop = (prev: number | undefined, now: number | undefined, i
  * the types expose none today, so this stays empty); otherwise the likeliest
  * from what Muka saw since the previous turn.
  */
-export const cacheDropCause = (seen: { gapMs: number; ttlMin: number; modelChanged: boolean; compacted: boolean; changed: boolean; tools?: string; engine?: string }): string =>
+export const cacheDropCause = (seen: { gapMs: number; ttlMin: number; modelChanged: boolean; effortChanged?: boolean; compacted: boolean; changed: boolean; tools?: string; engine?: string }): string =>
   seen.engine
     ? seen.engine
     : seen.gapMs > seen.ttlMin * 60_000
     ? `an idle gap (${duration(seen.gapMs)}) longer than the ${seen.ttlMin}-minute cache lifetime`
     : seen.modelChanged
       ? 'the model changed'
+      : seen.effortChanged
+      ? 'effort changed'
       : seen.tools
         ? `the tool list changed (${seen.tools})`
         : seen.compacted
@@ -4316,7 +4461,8 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
     `- Waste nudges: ${nudgesOn ? 'on' : 'off'} (/muka nudges on, /muka nudges off)`,
     `- Model guard: ${modelGuardOn ? 'on' : 'off'} (/muka models on, /muka models off)`,
-    `- Output trimming: ${trimOn ? 'on' : 'off'}, over ${trimLimit} characters (/muka trim on, /muka trim off, /muka trim <chars>)`,
+    `- Output trimming: ${trimSentence(trimMode, trimLimit)} (/muka trim auto, /muka trim on, /muka trim off, /muka trim <chars>)`,
+    `- Helper caps: ${capsHard ? 'hard (refused)' : 'soft (noted)'}; ${maxDepth === 0 ? 'no depth limit' : `depth ${maxDepth}`} (/muka caps, /muka caps hard on|off, /muka depth <n|off>)`,
     '- Context: /muka context (what filled Main\'s context: rules and notes, tool results by kind)',
     '- Handoff: /muka handoff (Main writes .claude/handoff.md for a fresh chat); /muka compact (hint Main to /compact now)',
     '- Menu: /muka menu opens the ☰ tab, a button for every command',
@@ -4422,12 +4568,14 @@ const SETUP_SKILLS = ['verify']
 
 /**
  * Muka's settings over yours: \`env\` merged key by key, every other key Muka
- * ships replaced; your plugins and marketplaces are never touched.
+ * ships replaced; your plugins and marketplaces are never touched; your own
+ * `autoCompactWindow` is never replaced (Muka's only fills it in when absent).
  */
 export const mergeMukaSettings = (cur: Record<string, unknown>, add: Record<string, unknown>): Record<string, unknown> => {
   const out: Record<string, unknown> = { ...cur }
   for (const [k, v] of Object.entries(add)) {
     const had = cur[k]
+    if (k === 'autoCompactWindow' && had !== undefined) continue
     // Plugins and marketplaces: Muka's are added, yours (including one you turned off) are kept.
     if (k === 'enabledPlugins' || k === 'extraKnownMarketplaces') {
       out[k] = { ...(v && typeof v === 'object' ? (v as object) : {}), ...(had && typeof had === 'object' ? (had as object) : {}) }
@@ -4512,6 +4660,11 @@ const runSetup = async ($: EngineInterface): Promise<{ text: string }> => {
       'Muka setup done:',
       ...done.map(d => `- ${d}`),
       record.some(r => r.backup) ? `What it replaced is saved in ${backup}; /muka setup undo puts it back.` : '',
+      cur.autoCompactWindow === undefined && merged.autoCompactWindow !== undefined
+        ? `autoCompactWindow ${String(merged.autoCompactWindow)} was added: the conversation auto-compacts at ${Number(merged.autoCompactWindow).toLocaleString('en-US')} tokens (your own value is never replaced).`
+        : cur.autoCompactWindow !== undefined && add.autoCompactWindow !== undefined
+          ? `Your autoCompactWindow (${String(cur.autoCompactWindow)}) was kept.`
+          : '',
       'The agents and settings apply from your next new chat.',
     ]
       .filter(Boolean)
@@ -4683,21 +4836,47 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
   }
   if (words[0] === 'trim') {
     const n = Number(words[1])
-    if (words[1] !== undefined && words[1] !== 'on' && words[1] !== 'off' && !Number.isFinite(n)) return { text: 'Use /muka trim on, /muka trim off, or /muka trim <characters> (the threshold).' }
-    if (Number.isFinite(n) && words[1] !== undefined) {
+    const usage = 'Use /muka trim auto, /muka trim on, /muka trim off, or /muka trim <characters> (the threshold).'
+    if (words[1] !== undefined && words[1] !== 'auto' && words[1] !== 'on' && words[1] !== 'off' && !Number.isFinite(n)) return { text: usage }
+    if (words[1] !== undefined && words[1] !== 'auto' && words[1] !== 'on' && words[1] !== 'off') {
       if (n < TRIM_MIN || n > TRIM_MAX) return { text: `Muka trim threshold: ${TRIM_MIN} to ${TRIM_MAX} characters (now ${trimLimit}).` }
       trimLimit = Math.floor(n)
       await $.store.set('trimLimit', trimLimit)
-      return { text: `Muka trim threshold: ${trimLimit} characters. Output trimming is ${trimOn ? 'on' : 'off'}.` }
+      return { text: `Muka trim threshold: ${trimLimit} characters. Output trimming is ${trimMode}.` }
     }
-    if (words[1] === undefined) return { text: `Muka output trimming is ${trimOn ? 'on' : 'off'}, over ${trimLimit} characters. Use /muka trim on, /muka trim off, or /muka trim <characters>.` }
-    trimOn = words[1] === 'on'
-    await $.store.set('trim', trimOn)
+    if (words[1] === undefined) return { text: `Muka output trimming is ${trimSentence(trimMode, trimLimit)}. ${usage}` }
+    trimMode = words[1] as TrimMode
+    await $.store.set('trim', trimMode)
     return {
-      text: trimOn
-        ? `Muka output trimming on: a Bash or PowerShell result over ${trimLimit} characters reaches the model as its start, its error lines and its end; the full text is saved under .claude/muka-outputs. Read, Grep, Edit, agents and MCP tools are never trimmed.`
-        : 'Muka output trimming off: every result reaches the model whole.',
+      text:
+        trimMode === 'auto'
+          ? `Muka output trimming auto: a Bash or PowerShell result over ${TRIM_AUTO_ALWAYS} characters reaches the model as its start, its error lines and its end, always; over ${trimLimit} characters once Main's context is ${TRIM_AUTO_CTX}% full (a helper's result: always). The full text is saved under .claude/muka-outputs. Read, Grep, Edit, agents and MCP tools are never trimmed.`
+          : trimMode === 'on'
+            ? `Muka output trimming on: a Bash or PowerShell result over ${trimLimit} characters reaches the model as its start, its error lines and its end; the full text is saved under .claude/muka-outputs. Read, Grep, Edit, agents and MCP tools are never trimmed.`
+            : 'Muka output trimming off: every result reaches the model whole.',
     }
+  }
+  if (words[0] === 'caps') {
+    if (words[1] === 'hard') {
+      if (words[2] !== 'on' && words[2] !== 'off') return { text: `Muka caps are ${capsHard ? 'hard' : 'soft'}. Use /muka caps hard on or /muka caps hard off.` }
+      capsHard = words[2] === 'on'
+      await $.store.set('capsHard', capsHard)
+      return {
+        text: capsHard
+          ? 'Muka hard caps on: a helper over a cap is refused, with what to do instead.'
+          : 'Muka hard caps off: a helper over a cap still starts; the starter hears one note per cap kind per prompt.',
+      }
+    }
+    return { text: capsText(await read($, agents)) }
+  }
+  if (words[0] === 'depth') {
+    const n = words[1] === 'off' ? 0 : Number(words[1])
+    if (words[1] === undefined || !Number.isInteger(n) || n < 0 || (words[1] !== 'off' && n < 1)) {
+      return { text: `Muka depth limit: ${maxDepth === 0 ? 'none' : `${maxDepth} level${maxDepth === 1 ? '' : 's'} below the master`}. Use /muka depth <n> (1 or more) or /muka depth off.` }
+    }
+    maxDepth = n
+    await $.store.set('maxDepth', n)
+    return { text: n === 0 ? 'Muka depth limit off: helpers may nest as deep as they like.' : `Muka depth limit: helpers may sit ${n} level${n === 1 ? '' : 's'} below the master.` }
   }
   if (words[0] === 'context') return { text: contextText(await read($, main), ctxSeen) }
   if (words[0] === 'handoff') {
@@ -4757,7 +4936,7 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'muka',
-      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday], /muka cache [ttl N], /muka audit, /muka trim on|off|<chars>, /muka context, /muka handoff, /muka compact, /muka menu',
+      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday], /muka cache [ttl N], /muka audit, /muka trim auto|on|off|<chars>, /muka caps [hard on|off], /muka depth <n|off>, /muka context, /muka handoff, /muka compact, /muka menu',
     })
     // On in every chat unless /savvy off turned it off; the delete guard is off
     // (it never asks) unless /savvy guard on turned it on.
@@ -4768,7 +4947,10 @@ export const register: Register = on => {
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
     modelGuardOn = (await $.store.get('models')) === true
-    trimOn = (await $.store.get('trim')) === true
+    trimMode = trimModeOf(await $.store.get('trim').catch(() => undefined))
+    capsHard = (await $.store.get('capsHard').catch(() => undefined)) === true
+    const storedDepth = await $.store.get('maxDepth').catch(() => undefined)
+    maxDepth = typeof storedDepth === 'number' && Number.isInteger(storedDepth) && storedDepth >= 0 ? storedDepth : DEPTH_DEFAULT
     const storedTrim = await $.store.get('trimLimit').catch(() => undefined)
     trimLimit = typeof storedTrim === 'number' && storedTrim >= TRIM_MIN && storedTrim <= TRIM_MAX ? storedTrim : TRIM_DEFAULT
     // A new conversation: nothing is counted yet.
@@ -4786,12 +4968,15 @@ export const register: Register = on => {
     largeSent = false
     sizingSent = false
     reuseNoted.clear()
+    capNoted.clear()
     mainHelpers = 0
     sizeRuleNoted = false
     // The prompt cache: a session.start that finds a turn already behind it is a reload (or a toggle) that may have changed the prompt prefix.
     const storedTtl = await $.store.get('cacheTtlMin').catch(() => undefined)
     cacheTtlMin = typeof storedTtl === 'number' && storedTtl > 0 ? storedTtl : CACHE_TTL_DEFAULT
     cacheSeen.compacted = false
+    cacheSeen.effortChanged = false
+    effortSeen.last = undefined
     cacheSeen.changed = (await read($, main)).cacheEndAt !== undefined
     Object.assign(wasteState, newWasteState())
     const storedBudget = await $.store.get('budget').catch(() => undefined)
@@ -4877,8 +5062,31 @@ ${largeText(rulesOff)}`)
   on('agent.spawn', async ($, e, next) => {
     let guarded: string | undefined
     let call = e
+    let softCap: CapHit | undefined
+    let thin = false
     try {
       const list = await read($, agents)
+      // Caps (a fork is a clone of its starter, never counted): hard refuses, soft lets it start and says so after.
+      if (e.subagentType !== 'fork') {
+        const hit = capCheck({
+          list,
+          parentId: e.parentAgentId,
+          size: promptStats.size,
+          started: mainHelpers,
+          maxDepth,
+          helpersOn: ruleOn('helpers'),
+          submastersOn: ruleOn('submasters'),
+        })
+        if (hit) {
+          const starter = e.parentAgentId === undefined ? 'Main' : agentLabel(list, e.parentAgentId)
+          if (capsHard) {
+            await ruleHit($, hit.rule, starter, `refused a ${clean(e.subagentType) || 'helper'}: ${hit.text}`)
+            return { deny: capDeny(hit) }
+          }
+          softCap = hit
+        }
+        if (ruleOn('helpers') && isThinBrief(e.subagentType, e.prompt)) thin = true
+      }
       // While the rules (and the sub-masters rule) are on, a helper gets the short rules with its brief.
       if (ruleOn('submasters')) {
         // A helper that writes code gets the short rules, so it can act as a sub-master.
@@ -4928,11 +5136,27 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
             await tellStarter($, e.parentAgentId, starter, reuseNote(agent.type))
             await ruleHit($, 'helpers', starter, `${agent.type} started while a finished one already has the context`)
           }
+          // caps (soft): the helper started; one notice and one note per cap kind per prompt.
+          if (softCap) {
+            const key = `${e.parentAgentId ?? 'main'}|${softCap.kind}`
+            const first = !capNoted.has(key)
+            capNoted.add(key)
+            // On a task sized S or M the size rule's own note says the same thing.
+            const sizeSays = softCap.kind === 'total' && ruleOn('size') && !sizeRuleNoted && (promptStats.size === 'S' || promptStats.size === 'M')
+            if (first && !sizeSays) await tellStarter($, e.parentAgentId, starter, capSoftNote(softCap))
+            await ruleHit($, softCap.rule, starter, first ? `${agent.type} started over a cap: ${softCap.text}` : undefined)
+          }
+          // helpers: a thin brief (once per prompt).
+          if (thin && !capNoted.has('brief')) {
+            capNoted.add('brief')
+            await tellStarter($, e.parentAgentId, starter, THIN_BRIEF_NOTE)
+            await ruleHit($, 'helpers', starter, `${agent.type} started on a thin brief`)
+          }
           // size: a helper beyond what the size allows (Main's own, once per prompt).
           if (e.parentAgentId === undefined) {
             mainHelpers += 1
             const size = promptStats.size
-            if (ruleOn('size') && !sizeRuleNoted && (size === 'S' || (size === 'M' && mainHelpers >= 3))) {
+            if (ruleOn('size') && !sizeRuleNoted && (size === 'S' || (size === 'M' && mainHelpers >= 4))) {
               sizeRuleNoted = true
               await tellStarter($, undefined, starter, sizeHelperNote(size))
               await ruleHit($, 'size', 'Main', `a helper started on a task sized ${size}${size === 'M' ? ' (the third)' : ''}`)
@@ -5020,7 +5244,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
     let trimmedChars = 0
     try {
       if (ran.deny === undefined && ran.isError !== true && !isGuardQuestion && !isOwnPush) {
-        const trimmed = await trimShellResult($, e.tool, ran.result)
+        const trimmed = await trimShellResult($, e.tool, ran.result, e.agentId)
         if (trimmed) {
           trimmedChars = trimmed.saved
           out = { result: trimmed.result, ...(out.context ? { context: out.context } : {}) } as typeof ran
@@ -5166,6 +5390,13 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
 
   // The size Claude gives a task ("Size: M"), from Main's own text, for the sizing check.
   on('turn.step', async function* ($, e, next) {
+    // Main's effort changed since its last request: a cache-drop suspect (the step input carries it).
+    if (e.agentId === undefined) {
+      const effort = (e as { effort?: unknown }).effort
+      const now = effort === undefined || effort === null ? undefined : String(effort)
+      if (effortSeen.last !== undefined && now !== undefined && now !== effortSeen.last) cacheSeen.effortChanged = true
+      if (now !== undefined) effortSeen.last = now
+    }
     const step = yield* next(e)
     try {
       if (e.agentId === undefined && promptStats.size === undefined && step.answer) {
@@ -5219,6 +5450,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       sizeAsked = false
       verifyFlagged = false
       reuseNoted.clear()
+      capNoted.clear()
       mainHelpers = 0
       sizeRuleNoted = false
       const prompt = clip(clean(e.text), 120)
@@ -5243,6 +5475,19 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       const spent = estimateUsd(usage, e.usage?.model ?? agent?.model)
       if (f && spent > 0) await update($, main, m => ({ ...m, spendByModel: { ...(m.spendByModel ?? {}), [f]: (m.spendByModel?.[f] ?? 0) + spent } }))
       if (agent && status !== 'done') await addNotice($, 'failed', agent.type, `${agent.description}: ${status}${e.reason === 'refusal' ? ' (refused)' : e.reason === 'error' ? ' (error)' : ''}`)
+      // The helpers rule: a long report fills the starter's context (one note per prompt).
+      try {
+        const len = typeof e.answer === 'string' ? e.answer.length : 0
+        if (agent && ruleOn('helpers') && e.reason === 'answer' && len > LONG_REPORT) {
+          await ruleHit($, 'helpers', agent.type, `long report from ${agent.type}: ~${kTokens(Math.round(len / 4))} tokens`)
+          if (!capNoted.has('report')) {
+            capNoted.add('report')
+            wasteState.pendingMain.push(LONG_REPORT_NOTE)
+          }
+        }
+      } catch {
+        // Best effort.
+      }
     } else {
       const model = e.usage?.model
       const f = family(model)
@@ -5269,6 +5514,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
             gapMs: cacheSeen.gapMs,
             ttlMin: cacheTtlMin,
             modelChanged: prior.model !== undefined && model !== undefined && prior.model !== model,
+            effortChanged: cacheSeen.effortChanged,
             compacted: cacheSeen.compacted,
             changed: cacheSeen.changed,
             tools: cacheSeen.tools,
@@ -5277,7 +5523,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
           await update($, main, m => ({ ...m, cacheDrop: { at: Date.now(), from: prevRate ?? 0, to: curRate ?? 0, cause, source: engine ? ('engine' as const) : ('guess' as const) } }))
           await ruleHit($, 'context', 'Main', `cache dropped ${prevRate}% → ${curRate}%: ${cause}`)
         }
-        if (e.reason !== 'aborted') Object.assign(cacheSeen, { compacted: false, changed: false, gapMs: 0, tools: '' })
+        if (e.reason !== 'aborted') Object.assign(cacheSeen, { compacted: false, changed: false, gapMs: 0, tools: '', effortChanged: false })
         // The tool servers as of Main's first finished turn: later turns are compared with this.
         if (knownServers === undefined) knownServers = await readServers($)
       } catch {
@@ -5650,7 +5896,19 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
           switchBtn('guard', '🗑 Delete guard', isGuardOn, cmd(`guard ${isGuardOn ? 'off' : 'on'}`)),
           switchBtn('pings', '🔔 Pings', pingsOn, cmd(`ping ${pingsOn ? 'off' : 'on'}`)),
           switchBtn('motion', '✨ Motion', motionOn, () => setMotion($, !motionOn)),
-          switchBtn('trim', '✂️ Trim', trimOn, cmd(`trim ${trimOn ? 'off' : 'on'}`)),
+          <Button
+            key="menu-trim"
+            label={`✂️ Trim: ${trimMode}`}
+            variant={trimMode === 'off' ? 'secondary' : 'primary'}
+            onPress={async () => { await runCommand($, `trim ${nextTrimMode(trimMode)}`); await redraw() }}
+          />,
+          switchBtn('caps-hard', '🚧 Hard caps', capsHard, cmd(`caps hard ${capsHard ? 'off' : 'on'}`)),
+          <Button
+            key="menu-depth"
+            label={`🪜 Depth: ${maxDepth === 0 ? 'no limit' : maxDepth}`}
+            variant={maxDepth === 0 ? 'secondary' : 'primary'}
+            onPress={async () => { await runCommand($, `depth ${nextDepth(maxDepth)}`); await redraw() }}
+          />,
           <Button
             key="menu-budget"
             label={`💲 Budget cycle: ${defaultBudget === undefined ? 'off' : `$${defaultBudget}`}`}
@@ -5676,6 +5934,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         group('Info', [
           info_('info-status', 'Status', 'status'),
           info_('info-cache', 'Cache', 'cache'),
+          info_('info-caps', 'Caps', 'caps'),
           info_('info-audit', 'Audit', 'audit'),
           info_('info-recap-today', 'Recap today', 'recap'),
           info_('info-recap-yesterday', 'Recap yesterday', 'recap yesterday'),
@@ -6133,7 +6392,12 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
             {toggle('ctl-guard', '🗑 Delete guard', isGuardOn, cmd(`guard ${isGuardOn ? 'off' : 'on'}`))}
             {toggle('ctl-pings', '🔔 Pings', pingsOn, cmd(`ping ${pingsOn ? 'off' : 'on'}`))}
             {toggle('ctl-motion', '✨ Motion', motionOn, () => setMotion($, !motionOn))}
-            {toggle('ctl-trim', '✂️ Trim', trimOn, cmd(`trim ${trimOn ? 'off' : 'on'}`))}
+            <Button
+              key="ctl-trim"
+              label={`✂️ Trim: ${trimMode}`}
+              variant={trimMode === 'off' ? 'secondary' : 'primary'}
+              onPress={async () => { await runCommand($, `trim ${nextTrimMode(trimMode)}`); await update($, tick, n => n + 1) }}
+            />
             <Button
               key="ctl-budget"
               label={`💲 Budget: ${defaultBudget === undefined ? 'off' : `$${defaultBudget}`}`}

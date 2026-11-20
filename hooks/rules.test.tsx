@@ -20,6 +20,9 @@ import {
 } from './register'
 import type { SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type Engine = Parameters<Body>[0]
 type On = Parameters<Body>[1]
@@ -55,12 +58,12 @@ test('the registry: nine rules, assembled into the full rules, the core and the 
 
 test('the new rule texts say what the rule controller asks', () => {
   const text = (id: string) => RULES.find(r => r.id === id)!.text
-  expect(text('models')).toMatch(/MUST pass `model` \(and `effort`\) on every Agent call/)
+  expect(text('models')).toMatch(/MUST name `model` and `effort` on every Agent call/)
   expect(text('models')).toMatch(/default is only a fallback/)
-  expect(text('models')).toMatch(/cheapest that fits; step up one level only after a real shortfall/)
-  expect(text('models')).toMatch(/`opus` \(or `fable`\).*only planning an L task, a bug sonnet cannot fix, and the final review of an L task/)
-  expect(text('models')).toMatch(/`sonnet`.*implementation, tests, docs/)
-  expect(text('models')).toMatch(/`haiku`.*reading/)
+  expect(text('models')).toMatch(/step up one level only after a real shortfall; any other model only when the user asks for it/)
+  expect(text('models')).toMatch(/`opus`, `high`: the final review of an L task, a bug that survived two fix attempts/)
+  expect(text('models')).toMatch(/`sonnet`, `medium`: building, tests, docs/)
+  expect(text('models')).toMatch(/`haiku`, `low`: reading and lookups/)
   expect(text('context')).toMatch(/50% full, finish the piece in hand and run \/compact \(say so to the user\)/)
   expect(text('context')).toMatch(/fresh chat \(\/clear\)/)
   expect(text('recover')).toMatch(/two failed fixes of the same problem, stop patching: go back to the last good state \(git restore \/ rewind\)/)
@@ -227,18 +230,18 @@ test('/muka rules lists every rule with its state and checks; /muka rule rejects
 test('models: a helper started without a model is marked, counted, and its starter told', async ($, on) => {
   engine(on)
   await start($)
-  await $.agent.spawn({ subagentType: 'builder', description: 'Piece', prompt: 'p' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Piece', prompt: BRIEF } as never)
   const next = ctxOf(await $.tool.call({ tool: 'Read', file_path: 'C:\\work\\a.ts' } as never))
   expect(next).toContain('Muka: you started builder without naming a model, so it runs on its default (sonnet 5.5). Name a model and effort on every helper call.')
   // A helper that starts one hears it on its own next step, not Main.
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', parentAgentId: 'agent-1' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: BRIEF, parentAgentId: 'agent-1' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'x' } as never)).some(c => /started Explore/.test(c))).toBe(false)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'y', agentId: 'agent-1' } as never))).toContain(
     'Muka: you started Explore without naming a model, so it runs on its default (sonnet 5.5). Name a model and effort on every helper call.',
   )
   // Named: nothing said; a fork is left alone.
-  await $.agent.spawn({ subagentType: 'builder', description: 'Named', prompt: 'p', model: 'sonnet' } as never)
-  await $.agent.spawn({ subagentType: 'fork', description: 'Fork', prompt: 'p' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Named', prompt: BRIEF, model: 'sonnet' } as never)
+  await $.agent.spawn({ subagentType: 'fork', description: 'Fork', prompt: BRIEF } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'z' } as never)).some(c => /without naming a model/.test(c))).toBe(false)
   expect((await muka($, 'rules')).text).toMatch(/models: Models · checked: 2/)
   // The console marks it.
@@ -248,7 +251,7 @@ test('models: a helper started without a model is marked, counted, and its start
   await desk.unmount()
   // Off: neither marked nor told.
   await muka($, 'rule models off')
-  await $.agent.spawn({ subagentType: 'builder', description: 'Quiet', prompt: 'p' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Quiet', prompt: BRIEF } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'w' } as never)).some(c => /without naming a model/.test(c))).toBe(false)
 })
 

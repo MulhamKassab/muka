@@ -26,7 +26,7 @@ const engine = (on: On, files: Map<string, string>, store: Record<string, unknow
   const norm = (p: string) => p.replace(/\\/g, '/')
   const shipped = (raw: string) => {
     const p = norm(raw)
-    if (p.endsWith('/extras/settings.json')) return JSON.stringify({ env: { MUKA_TEST: '1' }, model: 'sonnet', askUserQuestionTimeout: '60s' })
+    if (p.endsWith('/extras/settings.json')) return JSON.stringify({ env: { MUKA_TEST: '1' }, model: 'sonnet', askUserQuestionTimeout: '60s', autoCompactWindow: 200000 })
     if (p.endsWith('/extras/statusline.js')) return '// status line'
     if (p.endsWith('/extras/skills/verify/SKILL.md')) return '---\nname: verify\n---\nprove it ran'
     const m = p.match(/\/extras\/agents\/(.+\.md)$/)
@@ -71,11 +71,12 @@ test('/muka setup installs the agents, the verify skill, status line and setting
   engine(on, files)
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   const r = await $.command.run({ command: 'muka', args: 'setup' } as never)
-  expect(r.text).toMatch(/^Muka setup done:\n- agent: builder\n- agent: Explore\n- skill: verify\n- status line script\n- settings: env, model, askUserQuestionTimeout/)
+  expect(r.text).toMatch(/^Muka setup done:\n- agent: builder\n- agent: Explore\n- skill: verify\n- status line script\n- settings: env, model, askUserQuestionTimeout, autoCompactWindow/)
+  expect(r.text).toContain('autoCompactWindow 200000 was added: the conversation auto-compacts at 200,000 tokens (your own value is never replaced).')
   expect(files.get(`${HOME}/agents/builder.md`)).toMatch(/name: builder\n---\nnew/)
   expect(files.get(`${HOME}/skills/verify/SKILL.md`)).toBe('---\nname: verify\n---\nprove it ran')
   expect(files.get(`${HOME}/statusline.js`)).toBe('// status line')
-  expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'sonnet', env: { FOO: '1', MUKA_TEST: '1' }, enabledPlugins: { x: true }, askUserQuestionTimeout: '60s' })
+  expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'sonnet', env: { FOO: '1', MUKA_TEST: '1' }, enabledPlugins: { x: true }, askUserQuestionTimeout: '60s', autoCompactWindow: 200000 })
   // What it replaced is kept under backups.
   const saved = [...files.keys()].filter(k => k.startsWith(`${HOME}/backups/muka-setup-2`))
   expect(saved.map(k => k.replace(/.*muka-setup-[^/]+\//, '')).sort()).toEqual(['agents/builder.md', 'settings.json', 'skills/verify/SKILL.md'])
@@ -89,6 +90,36 @@ test('/muka setup installs the agents, the verify skill, status line and setting
   expect(undo.text).toMatch(/^Muka setup undone\. Put back: agents\/builder\.md, verify\/SKILL\.md, \.claude\/settings\.json\./)
   expect(files.get(`${HOME}/agents/builder.md`)).toBe('my old builder')
   expect(files.get(`${HOME}/skills/verify/SKILL.md`)).toBe('my old verify skill')
+})
+
+test('settings merge: autoCompactWindow is added only when yours has none, and never replaces yours', () => {
+  expect(mergeMukaSettings({ model: 'opus' }, { autoCompactWindow: 200000 })).toEqual({ model: 'opus', autoCompactWindow: 200000 })
+  expect(mergeMukaSettings({ autoCompactWindow: 350000 }, { autoCompactWindow: 200000, model: 'sonnet' })).toEqual({ autoCompactWindow: 350000, model: 'sonnet' })
+  // A value of 0 or null is still yours.
+  expect(mergeMukaSettings({ autoCompactWindow: null }, { autoCompactWindow: 200000 })).toEqual({ autoCompactWindow: null })
+})
+
+test('/muka setup keeps your own autoCompactWindow, says so, and undo puts the settings back', async ($, on) => {
+  const files = new Map<string, string>([[`${HOME}/settings.json`, JSON.stringify({ model: 'opus', autoCompactWindow: 350000 })]])
+  engine(on, files)
+  await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
+  const r = await $.command.run({ command: 'muka', args: 'setup' } as never)
+  expect(r.text).toContain('Your autoCompactWindow (350000) was kept.')
+  expect(r.text).not.toContain('was added')
+  expect(JSON.parse(files.get(`${HOME}/settings.json`)!).autoCompactWindow).toBe(350000)
+  await $.command.run({ command: 'muka', args: 'setup undo' } as never)
+  expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'opus', autoCompactWindow: 350000 })
+})
+
+test('/muka setup adds autoCompactWindow when yours has none; undo takes it out again', async ($, on) => {
+  const files = new Map<string, string>([[`${HOME}/settings.json`, JSON.stringify({ model: 'opus' })]])
+  engine(on, files)
+  await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
+  const r = await $.command.run({ command: 'muka', args: 'setup' } as never)
+  expect(r.text).toContain('autoCompactWindow 200000 was added')
+  expect(JSON.parse(files.get(`${HOME}/settings.json`)!).autoCompactWindow).toBe(200000)
+  await $.command.run({ command: 'muka', args: 'setup undo' } as never)
+  expect(JSON.parse(files.get(`${HOME}/settings.json`)!)).toEqual({ model: 'opus' })
 })
 
 test('/muka setup undo restores what the last setup replaced', async ($, on) => {

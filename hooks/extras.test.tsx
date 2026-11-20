@@ -13,6 +13,9 @@ import {
 } from './register'
 import type { LogEntry, SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 const PANE = {
   plugin: 'muka',
   component: 'Pane',
@@ -168,7 +171,7 @@ test('the cost tab splits the session by agent and by model', async ($, on) => {
   engine(on)
   await start($)
   await $.turn.start({ turnId: 't-0', text: 'build it' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Look', subagentType: 'Explore' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Look', subagentType: 'Explore' } as never)
   await $.turn.complete({
     answer: 'x', durationMs: 5, isAborted: false, turnId: 't-1', agentId: 'agent-1', reason: 'answer',
     usage: { model: 'claude-haiku-5-5', input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },

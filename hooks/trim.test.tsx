@@ -149,13 +149,13 @@ const alertCount = async ($: Engine, text: string): Promise<number> => {
   return found.length
 }
 
-test('trim is off by default: a long shell result reaches the model whole', async ($, on) => {
-  const { files } = engine(on)
+test('trim off (a stored false): a long shell result reaches the model whole', async ($, on) => {
+  const { files } = engine(on, { trim: false })
   await start($)
   const r = await $.tool.call({ tool: 'Bash', command: 'build', size: 30_000 } as never)
   expect(stdoutOf(r).length).toBeGreaterThanOrEqual(30_000)
   expect(files.size).toBe(0)
-  expect((await muka($, 'trim')).text).toMatch(/^Muka output trimming is off, over 12000 characters/)
+  expect((await muka($, 'trim')).text).toMatch(/^Muka output trimming is off, over 12000 characters when on/)
 })
 
 test('trim on: Bash and PowerShell results over the threshold come back trimmed, the full text saved; the rest is untouched', async ($, on) => {
@@ -206,7 +206,7 @@ test('the threshold: /muka trim <chars> sets it (1,000 to 200,000), keeps it, an
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'a', size: 30_000 } as never)).length).toBeGreaterThanOrEqual(30_000)
   expect(stdoutOf(await $.tool.call({ tool: 'Bash', command: 'a', size: 50_000 } as never)).length).toBeLessThan(9_000)
   expect((await muka($, 'trim 500')).text).toMatch(/^Muka trim threshold: 1000 to 200000 characters \(now 40000\)/)
-  expect((await muka($, 'trim sideways')).text).toMatch(/^Use \/muka trim on/)
+  expect((await muka($, 'trim sideways')).text).toMatch(/^Use \/muka trim auto/)
   // Kept for the next chat, with the switch.
   await start($)
   expect((await muka($, 'trim')).text).toMatch(/^Muka output trimming is on, over 40000 characters/)
@@ -466,7 +466,7 @@ test('/muka lists the new commands; /muka menu opens the tab', async ($, on) => 
   await start($)
   const status = (await muka($, '')).text
   for (const part of ['/muka trim on', '/muka trim <chars>', '/muka context', '/muka handoff', '/muka compact', '/muka menu']) expect(status).toContain(part)
-  expect(status).toContain('- Output trimming: off, over 12000 characters')
+  expect(status).toContain('- Output trimming: auto: a shell result over 20000 characters is trimmed; over 12000')
   const ui = await mount($)
   expect((await muka($, 'menu')).text).toMatch(/^Muka menu:/)
   expect(await ui.find({ type: 'Text', text: 'Switches' })).toBeDefined()
@@ -483,10 +483,10 @@ test('the Menu: every command has a button; toggles show their state and flip; t
   const keys = (await ui.findAll({ type: 'Button' })).map(b => String(b.props.key)).filter(k => k.startsWith('menu-'))
   expect(new Set(keys).size).toBe(keys.length)
   for (const k of [
-    'rules', 'nudges', 'models', 'guard', 'pings', 'motion', 'trim', 'budget',
+    'rules', 'nudges', 'models', 'guard', 'pings', 'motion', 'trim', 'caps-hard', 'depth', 'budget',
     'view-rules', 'view-context', 'view-report', 'view-alerts', 'view-changes', 'view-activity',
     'wrap', 'stop', 'verify', 'handoff', 'compact',
-    'info-status', 'info-cache', 'info-audit', 'info-recap-today', 'info-recap-yesterday', 'info-rules',
+    'info-status', 'info-cache', 'info-caps', 'info-audit', 'info-recap-today', 'info-recap-yesterday', 'info-rules',
     'rea-status', 'rea-setup', 'rea-doctor', 'setup', 'setup-undo',
   ]) expect(keys).toContain(`menu-${k}`)
   for (const h of ['Switches', 'Views', 'Actions', 'Info', 'Tools']) expect(await ui.find({ type: 'Text', text: h })).toBeDefined()
@@ -495,12 +495,32 @@ test('the Menu: every command has a button; toggles show their state and flip; t
     const b = (await ui.find({ type: 'Button', key: `menu-${k}` }))!
     return `${String(b.props.label).replace(/^\S+ /, '')}|${String(b.props.variant)}`
   }
-  expect(await state('trim')).toBe('Trim: off|secondary')
+  // Trim cycles auto, on, off, auto.
+  expect(await state('trim')).toBe('Trim: auto|primary')
   await ui.press({ key: 'menu-trim' })
   expect(await state('trim')).toBe('Trim: on|primary')
   expect((await muka($, 'trim')).text).toMatch(/^Muka output trimming is on/)
   await ui.press({ key: 'menu-trim' })
   expect(await state('trim')).toBe('Trim: off|secondary')
+  await ui.press({ key: 'menu-trim' })
+  expect(await state('trim')).toBe('Trim: auto|primary')
+  // Hard caps toggle; depth cycles 2, 3, no limit, 2.
+  expect(await state('caps-hard')).toBe('Hard caps: off|secondary')
+  await ui.press({ key: 'menu-caps-hard' })
+  expect(await state('caps-hard')).toBe('Hard caps: on|primary')
+  expect((await muka($, 'caps')).text).toMatch(/^Muka caps: hard/)
+  await ui.press({ key: 'menu-caps-hard' })
+  expect(await state('caps-hard')).toBe('Hard caps: off|secondary')
+  expect(await state('depth')).toBe('Depth: 2|primary')
+  await ui.press({ key: 'menu-depth' })
+  expect(await state('depth')).toBe('Depth: 3|primary')
+  await ui.press({ key: 'menu-depth' })
+  expect(await state('depth')).toBe('Depth: no limit|secondary')
+  expect((await muka($, 'depth')).text).toMatch(/^Muka depth limit: none/)
+  await ui.press({ key: 'menu-depth' })
+  expect(await state('depth')).toBe('Depth: 2|primary')
+  await ui.press({ key: 'menu-info-caps' })
+  expect(String((await ui.find({ type: 'Markdown' }))!.props.text)).toContain('Muka caps: soft')
   expect(await state('nudges')).toBe('Nudges: on|primary')
   await ui.press({ key: 'menu-nudges' })
   expect(await state('nudges')).toBe('Nudges: off|secondary')
@@ -534,7 +554,7 @@ test('the Menu: an info button prints into the result area; Clear empties it', a
   expect(String(md.props.text)).toContain('Muka cache: no turn yet, so no cache clock.')
   expect(await ui.find({ type: 'Button', key: 'menu-clear' })).toBeDefined()
   await ui.press({ key: 'menu-info-status' })
-  expect(String((await ui.find({ type: 'Markdown' }))!.props.text)).toContain('- Output trimming: off')
+  expect(String((await ui.find({ type: 'Markdown' }))!.props.text)).toContain('- Output trimming: auto')
   await ui.press({ key: 'menu-info-rules' })
   expect(String((await ui.find({ type: 'Markdown' }))!.props.text)).toMatch(/^Muka rules \(on\)/)
   await ui.press({ key: 'menu-handoff' })
@@ -578,10 +598,15 @@ test('the Bridge rows carry the Trim toggle and the Handoff action', async ($, o
   await start($)
   const desk = await mount($, 'desktop')
   const trim = async () => (await desk.find({ type: 'Button', key: 'ctl-trim' }))!.props
-  expect(String((await trim()).label)).toBe('✂️ Trim: off')
+  expect(String((await trim()).label)).toBe('✂️ Trim: auto')
   await desk.press({ key: 'ctl-trim' })
   expect(String((await trim()).label)).toBe('✂️ Trim: on')
   expect((await trim()).variant).toBe('primary')
   expect((await muka($, 'trim')).text).toMatch(/^Muka output trimming is on/)
+  await desk.press({ key: 'ctl-trim' })
+  expect(String((await trim()).label)).toBe('✂️ Trim: off')
+  expect((await trim()).variant).toBe('secondary')
+  await desk.press({ key: 'ctl-trim' })
+  expect(String((await trim()).label)).toBe('✂️ Trim: auto')
   await desk.unmount()
 })

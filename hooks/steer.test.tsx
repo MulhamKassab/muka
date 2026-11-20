@@ -3,6 +3,9 @@ import { expect, mock, test } from 'claude-code/testing'
 import { agentIcon, nowLine, STUCK_MS, stuckAgents, warnings } from './register'
 import type { SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 const PANE = {
   plugin: 'muka',
   component: 'Pane',
@@ -64,7 +67,7 @@ test('a steer note reaches the agent at its next step, without stopping it', asy
   const seen = engine(on, { context: [] })
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'go' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Look', subagentType: 'Explore' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Look', subagentType: 'Explore' } as never)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', viewport: { columns: 100, rows: 48 } } as never)
   await ui.press({ key: 'tab-steer' })
@@ -92,7 +95,7 @@ test('the activity feed filters by agent or tool, and a pinned tab opens first i
   engine(on, { context: [] })
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'go' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Look', subagentType: 'Explore' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Look', subagentType: 'Explore' } as never)
   await $.tool.call({ tool: 'Read', file_path: 'C:\\work\\a.ts' } as never)
   await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-1' } as never)
   await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)

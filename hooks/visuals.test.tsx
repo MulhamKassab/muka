@@ -3,6 +3,9 @@ import { expect, mock, test } from 'claude-code/testing'
 import { agentColor, breadcrumb, isInjected, treeChart, treeParents, treeRows } from './register'
 import type { SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 const PANE = {
   plugin: 'muka',
   component: 'Pane',
@@ -72,8 +75,8 @@ test('the activity feed lists every step, newest first, and the detail view open
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'go' } as never)
   await $.tool.call({ tool: 'Read', file_path: 'C:\\work\\a.ts' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Find the configs', subagentType: 'Explore' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Check one', subagentType: 'checker', parentAgentId: 'agent-1' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Find the configs', subagentType: 'Explore' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Check one', subagentType: 'checker', parentAgentId: 'agent-1' } as never)
   for (let i = 0; i < 8; i++) await $.tool.call({ tool: 'Grep', pattern: `p${i}`, agentId: 'agent-1' } as never)
   await $.tool.call({ tool: 'Bash', command: 'npm test', agentId: 'agent-2' } as never)
 
@@ -112,7 +115,7 @@ test('a helper report or task notice arriving as a turn does not wipe the panel'
   engine(on)
   await $.session.start({ cwd: 'C:\work', surface: 'terminal', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'run the demo' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Count tests', subagentType: 'Explore' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Count tests', subagentType: 'Explore' } as never)
   await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-1' } as never)
   await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't-1', agentId: 'agent-1', reason: 'answer' } as never)
   await $.turn.complete({ answer: 'ok', durationMs: 5, isAborted: false, turnId: 't-0', reason: 'answer' } as never)

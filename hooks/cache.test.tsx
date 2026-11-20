@@ -22,6 +22,9 @@ import {
 } from './register'
 import type { MainInfo } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 type Body = Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>
 type Engine = Parameters<Body>[0]
 type On = Parameters<Body>[1]
@@ -131,36 +134,48 @@ test('the audit report: unused plugins, the most used, the way to turn one off',
   expect(auditReport([], counts, 3)).toMatch(/no enabled plugins found/)
 })
 
-test('the tuned rule texts: none longer than before, the new wording in, the brief under 900 characters', () => {
+test('the tuned rule texts: the helper table with its exact counts, the brief under 900 characters', () => {
   const text = (id: string) => RULES.find(r => r.id === id)!.text
-  // The lengths before the tuning.
-  const before: Record<string, number> = { size: 767, helpers: 897, models: 529, submasters: 551, verify: 602 }
-  for (const [id, n] of Object.entries(before)) expect(text(id).length).toBeLessThanOrEqual(n)
-  expect(text('size')).toMatch(/\*\*M\*\*: .*At most two `Explore` helpers read; you build\./)
+  expect(text('size')).toContain('- **M**: needs research or reading many files. At most 3 helpers (see "Helpers"); you build.')
   expect(text('size')).toMatch(/\*\*S\*\*: .*No helpers\./)
+  expect(text('size')).toContain('at most 6 helpers, in waves of 3')
   const helpers = text('helpers')
-  expect(helpers).toMatch(/continue a helper that holds the context \(SendMessage\)/)
-  expect(helpers).toMatch(/No helper for what about three tool calls of your own can do/)
-  expect(helpers).toMatch(/Briefs\*\* name the exact files and what is already known/)
-  expect(helpers).toMatch(/`Explore`: at most 100 words, file:line facts/)
-  expect(helpers).toMatch(/Parallel only for independent work/)
-  expect(text('models')).toMatch(/MUST pass `model` \(and `effort`\) on every Agent call/)
-  expect(text('submasters')).toMatch(/only for an L piece whose parts have their own files; otherwise it does the piece itself/)
-  expect(text('submasters')).toMatch(/150 words at every level/)
-  expect(text('verify')).toMatch(/While working, run the targeted tests; once at the end, the full suite/)
-  expect(text('verify')).toMatch(/A `reviewer` only on L tasks/)
+  expect(helpers.startsWith('## Helpers: which, when, how many')).toBe(true)
+  expect(RULES.find(r => r.id === 'helpers')!.title).toBe('Helpers: which, when, how many')
+  for (const line of [
+    'Helpers cost about 4x the tokens of doing the work yourself, so start one only where this list says.',
+    '- **None:** a change in up to 3 files with the location known; one question over fewer than 10 files; dependent steps; edits to the same file; anything that needs back-and-forth.',
+    '- **`Explore` (haiku, low):** 10+ files to explore, or 2-3 independent questions: one per question, at most 3 at once. Web or docs research: 1-2 (sonnet if it must weigh sources).',
+    '- **`builder` (sonnet, medium):** 2+ independent pieces in different files, each about 10+ tool calls: one per piece, 2 usual, at most 3 per wave. One `builder` (sonnet, low) as a runner for a noisy run (full test suite, long logs) that returns a summary.',
+    '- **One fresh `builder` (opus, high)** with a full brief for a bug that survived two fix attempts.',
+    '- **`reviewer` (opus, high):** once, at the end of an L task. **`checker`:** only when the user asks, or in careful mode.',
+    '- **Totals per prompt:** S 0, M at most 3, L at most 6 in waves of at most 3.',
+    '- **Brief:** the objective, the exact files, what is already known, done-when, the output format. **Report back:** at most 150 words. Reuse a helper that already has the context (SendMessage) before starting a new one; never poll a helper.',
+    '- **Advisor:** main session only',
+    '**Stop rules:**',
+    '**Muka notes**',
+  ]) expect(helpers).toContain(line)
+  expect(text('models')).toContain('You MUST name `model` and `effort` on every Agent call')
+  expect(text('models')).toContain('step up one level only after a real shortfall; any other model only when the user asks for it')
+  expect(text('submasters')).toContain('only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless the user lifts the limit; otherwise it does the piece itself')
+  expect(text('submasters')).toContain('150 words')
+  expect(text('large')).toContain('at most 3 per wave and 6 in all')
+  expect(text('large')).toContain('`reviewer` (opus, high) once')
+  expect(text('verify')).toContain('While working, run the targeted tests; once at the end, the full suite')
+  expect(text('verify')).toContain('A `reviewer` only on L tasks')
   expect(RULES.find(r => r.id === 'helpers')!.when).toBe('always')
   const brief = helperBrief(2)
   expect(brief.length).toBeLessThan(900)
-  expect(brief).toMatch(/SendMessage/)
-  expect(brief).toMatch(/Explore: 100 words/)
-  expect(brief).toMatch(/Start cheap, step up after a real shortfall/)
+  expect(brief).toContain('SendMessage')
+  expect(brief).toContain('at most 2, and at most two levels below the master')
+  expect(brief).toContain('Explore haiku/low; builder sonnet/medium; opus/high only for a bug that survived two fixes')
+  expect(brief).toContain('Step up one level only after a real shortfall')
 })
 
 test('the notes quote their rules', () => {
   expect(reuseNote('Explore')).toBe('Muka: a finished Explore helper already has context on this; continue it with SendMessage instead of starting a new one, unless the work is unrelated.')
   expect(sizeHelperNote('S')).toMatch(/S: a few files and a clear change\. Do it yourself and run the tests yourself\. No helpers\./)
-  expect(sizeHelperNote('M')).toMatch(/At most two `Explore` helpers read; you build\..*third helper/)
+  expect(sizeHelperNote('M')).toMatch(/At most 3 helpers \(see "Helpers"\); you build\..*fourth helper/)
   expect(exploreModelNote('opus')).toMatch(/reading runs on haiku/)
 })
 
@@ -336,7 +351,7 @@ test('use counts feed /muka audit; old days are pruned; the report only reads th
   await $.tool.call({ tool: 'Skill', skill: 'vercel:deploy' } as never)
   await $.tool.call({ tool: 'Skill', skill: 'verify' } as never)
   await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
-  await $.agent.spawn({ subagentType: 'vercel:ai-architect', description: 'd', prompt: 'p', model: 'sonnet' } as never)
+  await $.agent.spawn({ subagentType: 'vercel:ai-architect', description: 'd', prompt: BRIEF, model: 'sonnet' } as never)
   const audit = (await muka($, 'audit')).text
   expect(audit).toMatch(/^Muka audit: 2 of 4 enabled plugins have no recorded use in the 1 tracked day\./)
   expect(audit).toContain('No use:\n- figma\n- unused')
@@ -351,27 +366,28 @@ test('helpers: starting a type again while a finished one holds the context brin
   await start($)
   await muka($, 'rule size off')
   await $.turn.start({ turnId: 'h1', text: 'look around' } as never)
-  await $.agent.spawn({ subagentType: 'Explore', description: 'First', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'First', prompt: BRIEF, model: 'haiku' } as never)
   // Still running: no note.
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Second', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Second', prompt: BRIEF, model: 'haiku' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'a' } as never))).toEqual([])
   await $.turn.complete({ answer: 'found', durationMs: 10, isAborted: false, turnId: 'h1', reason: 'answer', agentId: 'agent-1' } as never)
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Third', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Third', prompt: BRIEF, model: 'haiku' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'b' } as never))).toEqual([reuseNote('Explore')])
   // Once per type per prompt; another type has none finished.
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Fourth', prompt: 'p', model: 'haiku' } as never)
-  await $.agent.spawn({ subagentType: 'builder', description: 'Piece', prompt: 'p', model: 'sonnet' } as never)
+  await $.turn.complete({ answer: 'x', durationMs: 10, isAborted: true, turnId: 'h1', reason: 'aborted', agentId: 'agent-2' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Fourth', prompt: BRIEF, model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Piece', prompt: BRIEF, model: 'sonnet' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'c' } as never))).toEqual([])
-  expect((await muka($, 'rules')).text).toMatch(/helpers: Helpers · checked: 1/)
+  expect((await muka($, 'rules')).text).toMatch(/helpers: Helpers: which, when, how many · checked: 1/)
   expect(await alertCount($, 'Explore started while a finished one already has the context')).toBe(1)
   // The rule off: nothing said.
   await muka($, 'rule helpers off')
   await $.turn.complete({ answer: 'found', durationMs: 10, isAborted: false, turnId: 'h1', reason: 'answer', agentId: 'agent-2' } as never)
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Fifth', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Fifth', prompt: BRIEF, model: 'haiku' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'd' } as never))).toEqual([])
 })
 
-test('size: a helper on a task sized S, or the third on one sized M, brings one note quoting the rule', async ($, on) => {
+test('size: a helper on a task sized S, or the fourth on one sized M, brings one note quoting the rule', async ($, on) => {
   engine(on)
   // The size Claude gave, as turn.step reads it from Main's text.
   on('turn.step', async function* (_, e) {
@@ -384,26 +400,32 @@ test('size: a helper on a task sized S, or the third on one sized M, brings one 
 
   await $.turn.start({ turnId: 's1', text: 'small thing' } as never)
   await say('S')
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: BRIEF, model: 'haiku' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'a' } as never))).toEqual([sizeHelperNote('S')])
   // One note per prompt.
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout 2', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout 2', prompt: BRIEF, model: 'haiku' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'b' } as never))).toEqual([])
 
+  // The first prompt's two helpers stop, so only this prompt's count.
+  await $.turn.complete({ answer: 'x', durationMs: 10, isAborted: true, turnId: 's1', reason: 'aborted', agentId: 'agent-1' } as never)
+  await $.turn.complete({ answer: 'x', durationMs: 10, isAborted: true, turnId: 's1', reason: 'aborted', agentId: 'agent-2' } as never)
   await $.turn.start({ turnId: 's2', text: 'medium thing' } as never)
   await say('M')
-  await $.agent.spawn({ subagentType: 'Explore', description: 'One', prompt: 'p', model: 'haiku' } as never)
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Two', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'One', prompt: BRIEF, model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Two', prompt: BRIEF, model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Three', prompt: BRIEF, model: 'sonnet' } as never)
+  // Three on an M task is within its cap of 3.
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'c' } as never))).toEqual([])
-  await $.agent.spawn({ subagentType: 'builder', description: 'Three', prompt: 'p', model: 'sonnet' } as never)
+  await $.agent.spawn({ subagentType: 'builder', description: 'Four', prompt: BRIEF, model: 'sonnet' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'd' } as never))).toEqual([sizeHelperNote('M')])
   expect((await muka($, 'rules')).text).toMatch(/size: Size every task first · checked: 2/)
 
   // Sized L, or the rule off: nothing.
   await muka($, 'rule size off')
+  await muka($, 'rule helpers off')
   await $.turn.start({ turnId: 's3', text: 'another small thing' } as never)
   await say('S')
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Quiet', prompt: 'p', model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Quiet', prompt: BRIEF, model: 'haiku' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'e' } as never))).toEqual([])
 })
 
@@ -412,18 +434,20 @@ test('models: an Explore started on Opus or Fable brings a note that reading run
   await start($)
   await muka($, 'rule size off')
   await $.turn.start({ turnId: 'm1', text: 'read it' } as never)
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: 'p', model: 'opus' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout', prompt: BRIEF, model: 'opus' } as never)
   expect(seen.asked).toEqual(['opus'])
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'a' } as never))).toEqual([exploreModelNote('opus')])
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout 2', prompt: 'p', model: 'claude-fable-5' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout 2', prompt: BRIEF, model: 'claude-fable-5' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'b' } as never))).toEqual([exploreModelNote('fable')])
   // Haiku, or another type on Opus, is fine.
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout 3', prompt: 'p', model: 'haiku' } as never)
-  await $.agent.spawn({ subagentType: 'reviewer', description: 'Review', prompt: 'p', model: 'opus' } as never)
+  await $.turn.complete({ answer: 'x', durationMs: 10, isAborted: true, turnId: 'm1', reason: 'aborted', agentId: 'agent-1' } as never)
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Scout 3', prompt: BRIEF, model: 'haiku' } as never)
+  await $.agent.spawn({ subagentType: 'reviewer', description: 'Review', prompt: BRIEF, model: 'opus' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'c' } as never))).toEqual([])
   expect((await muka($, 'rules')).text).toMatch(/models: Models · checked: 2/)
   await muka($, 'rule models off')
-  await $.agent.spawn({ subagentType: 'Explore', description: 'Quiet', prompt: 'p', model: 'opus' } as never)
+  await muka($, 'rule helpers off')
+  await $.agent.spawn({ subagentType: 'Explore', description: 'Quiet', prompt: BRIEF, model: 'opus' } as never)
   expect(ctxOf(await $.tool.call({ tool: 'Grep', pattern: 'd' } as never))).toEqual([])
 })
 

@@ -6,6 +6,7 @@
   },
   "advisorModel": "fable",
   "askUserQuestionTimeout": "60s",
+  "autoCompactWindow": 200000,
   "agentPushNotifEnabled": true,
   "inputNeededNotifEnabled": true,
   "extraKnownMarketplaces": {

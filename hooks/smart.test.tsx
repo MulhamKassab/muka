@@ -188,17 +188,17 @@ test('review fixes: different failing edits are not a retry loop; a solo task of
 
 const sub = (over: Partial<SubAgent>): SubAgent => ({ id: 'a', type: 'builder', description: 'd', model: 'sonnet', status: 'running', startedAt: 0, steps: [], stepCount: 0, ...over })
 
-test('every helper is a sub-master at any depth, with a short brief', () => {
+test('every helper is a sub-master, with a short brief', () => {
   const list = [sub({ id: 'b1' }), sub({ id: 'b2', parentId: 'b1' }), sub({ id: 'b3', parentId: 'b2' })]
   expect(levelOf(list, undefined)).toBe(1)
   expect(levelOf(list, 'b1')).toBe(2)
   expect(levelOf(list, 'b3')).toBe(4)
   expect(helperBrief(3)).toMatch(/You are a sub-master/)
-  expect(helperBrief(3)).toMatch(/opus or fable/)
-  expect(helperBrief(1).length).toBeLessThan(1200)
+  expect(helperBrief(3)).toMatch(/opus\/high only for a bug that survived two fixes/)
+  expect(helperBrief(1).length).toBeLessThan(900)
 })
 
-test('a helper gets the brief with its prompt, and helpers may start helpers at any depth', async ($, on) => {
+test('a helper gets the brief with its prompt, and a helper past the depth limit still starts while the caps are soft', async ($, on) => {
   engine(on)
   const prompts: string[] = []
   on('agent.spawn', (_, e) => {

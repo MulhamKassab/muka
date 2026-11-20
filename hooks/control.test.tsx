@@ -3,6 +3,9 @@ import { expect, mock, test } from 'claude-code/testing'
 import { agentCard } from './register'
 import type { SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 const PANE = {
   plugin: 'muka',
   component: 'Pane',
@@ -38,7 +41,7 @@ const engine = (on: On) => {
 const start = async ($: Parameters<Body>[0]) => {
   await $.session.start({ cwd: 'C:/work', surface: 'desktop', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'build it' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build the mailer', subagentType: 'builder', model: 'sonnet' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Build the mailer', subagentType: 'builder', model: 'sonnet' } as never)
   await $.tool.call({ tool: 'Grep', pattern: 'x', agentId: 'agent-1' } as never)
 }
 

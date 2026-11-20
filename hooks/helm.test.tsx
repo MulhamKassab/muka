@@ -3,6 +3,9 @@ import { expect, mock, test } from 'claude-code/testing'
 import { bridgeCard, bridgeStrip, budgetState, nextVerify, orbitChart, planBudget, pulseLine, spendBar, verifyChip, verifyEffect } from './register'
 import type { SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 const PANE = {
   plugin: 'muka',
   component: 'Pane',
@@ -164,7 +167,7 @@ test('/muka works, and the budget warns the agents at 70% and 100%', async ($, o
 
   await $.session.measure(cost(10))
   await $.turn.start({ turnId: 't-0', text: 'build the mailer' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder', model: 'sonnet' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Build it', subagentType: 'builder', model: 'sonnet' } as never)
   // PLAN.md sets this prompt's budget to $1.
   await $.tool.call({ tool: 'Write', file_path: 'C:\\tmp\\PLAN.md', content: '# Plan\nBudget: $1\n' } as never)
   await $.session.measure(cost(10.5))
@@ -207,7 +210,7 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   engine(on)
   await $.session.start({ cwd: 'C:\work', surface: 'desktop', isInteractive: true } as never)
   await $.turn.start({ turnId: 't-0', text: 'build the mailer' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Build it', subagentType: 'builder' } as never)
   await $.tool.call({ tool: 'Read', file_path: 'C:\work\a.ts', agentId: 'agent-1' } as never)
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
   // One card: the head, the orbit, the gauges and the latest steps.
@@ -342,7 +345,7 @@ test('the Bridge actions send notes to Main and the running helpers, and toast',
   const toasts = engine(on)
   await deskStart($)
   await $.turn.start({ turnId: 't-0', text: 'build it' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Build it', subagentType: 'builder', model: 'sonnet' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Build it', subagentType: 'builder', model: 'sonnet' } as never)
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const keys = (await desk.findAll({ type: 'Button' })).map(b => String(b.props.key))
   expect(new Set(keys).size).toBe(keys.length)

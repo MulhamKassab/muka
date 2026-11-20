@@ -15,6 +15,9 @@ import {
 } from './register'
 import type { SubAgent } from '../types'
 
+/** A brief that is not thin: the objective, the files, what is known, done-when, the output format. */
+const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
+
 const PANE = {
   plugin: 'muka',
   component: 'Pane',
@@ -321,7 +324,7 @@ test('should know: failures, denials, risky commands, outside writes and a work 
   await $.tool.call({ tool: 'Bash', command: 'git push --force' } as never)
   await $.tool.call({ tool: 'Edit', file_path: 'C:\\proj\\src\\a.ts' } as never)
   await $.tool.call({ tool: 'Write', file_path: 'C:\\Users\\me\\.bashrc' } as never)
-  await $.agent.spawn({ prompt: 'p', description: 'Try a thing', subagentType: 'Explore' } as never)
+  await $.agent.spawn({ prompt: BRIEF, description: 'Try a thing', subagentType: 'Explore' } as never)
   await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, turnId: 't-1', agentId: 'agent-1', reason: 'error' } as never)
 
   const ui = await showTab($, 'tab-notes')
@@ -366,7 +369,7 @@ test('the terminal tree keeps each agent with its step line, and says how many a
   engine(on, { ids })
   await start($)
   for (let i = 0; i < 6; i++) {
-    await $.agent.spawn({ prompt: 'p', description: `task${i}`, subagentType: 'Explore' } as never)
+    await $.agent.spawn({ prompt: BRIEF, description: `task${i}`, subagentType: 'Explore' } as never)
     await $.tool.call({ tool: 'Grep', pattern: `p${i}`, agentId: ids[i] } as never)
   }
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', viewport: { columns: 80, rows: 16 } } as never)
