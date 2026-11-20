@@ -225,8 +225,10 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   expect(source).toContain('>CONTEXT<')
   // The views are one row of icons, the open one primary; steering lives on the Bridge, so no Steer icon.
   const tabs = (await desk.findAll({ type: 'Button' })).filter(b => String(b.props.key).startsWith('tab-'))
-  expect(tabs).toHaveLength(7)
+  expect(tabs).toHaveLength(9)
   expect(tabs.at(-1)!.props.key).toBe('tab-rules')
+  // The Menu is the first tab after the Bridge; Context sits after Spend.
+  expect(tabs.map(b => b.props.key)).toEqual(['tab-flow', 'tab-menu', 'tab-activity', 'tab-notes', 'tab-radius', 'tab-cost', 'tab-context', 'tab-reflect', 'tab-rules'])
   expect(tabs.some(b => b.props.key === 'tab-steer')).toBe(false)
   expect(tabs.filter(b => b.props.variant === 'primary').map(b => b.props.key)).toEqual(['tab-flow'])
   expect(String(tabs[0]!.props.label)).toBe('🧭')

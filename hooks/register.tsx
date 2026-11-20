@@ -237,6 +237,8 @@ const tick = atom({ plugin: 'muka', key: 'tick' } as const, 0, { shape: 'tick-1'
 const feedFilter = atom({ plugin: 'muka', key: 'feedFilter' } as const, '', { shape: 'feed-filter-1' })
 const steer = atom({ plugin: 'muka', key: 'steer' } as const, [] as SteerNote[], { shape: 'steer-2' })
 const steerTo = atom({ plugin: 'muka', key: 'steerTo' } as const, 'main', { shape: 'steer-to-1' })
+const menuResult = atom({ plugin: 'muka', key: 'menuResult' } as const, '', { shape: 'menu-result-1' })
+const menuConfirm = atom({ plugin: 'muka', key: 'menuConfirm' } as const, { key: '', at: 0 }, { shape: 'menu-confirm-1' })
 
 // Whether Savvy mode (the panel) is on, and whether the delete guard is on.
 // Kept in $.store so they carry across sessions; re-read at each session.start
@@ -1669,6 +1671,7 @@ export const efficiencyReport = (entries: LogEntry[], days: number): string => {
   const wasteTokens = entries.reduce((n, e) => n + (e.wasteTokens ?? 0), 0)
   const wasteCount = entries.reduce((n, e) => n + (e.wasteCount ?? 0), 0)
   const guarded = entries.reduce((n, e) => n + (e.guarded ?? 0), 0)
+  const trimSaved = entries.reduce((n, e) => n + (e.trimSavedTokens ?? 0), 0)
   const out: string[] = [
     `**Muka report, last ${plural(days, 'day')}:** ${plural(entries.length, 'prompt')}, about ${usd(cost)} at API prices (${usd(cost / entries.length)} a prompt), ${kTokens(tokens)} tokens${cache !== undefined ? `, ${cache}% cached` : ''}.`,
   ]
@@ -1686,6 +1689,10 @@ export const efficiencyReport = (entries: LogEntry[], days: number): string => {
   const sizing = sizingStats(entries)
   if (sizing.sized > 0) out.push(`**Sizing:** ${sizing.sized} sized; ${sizing.under} turned out bigger than sized, ${sizing.over} far smaller.`)
   if (wasteCount > 0 || guarded > 0) out.push(`**Caught:** ${plural(wasteCount, 'waste nudge')} (~${kTokens(wasteTokens)} tokens)${guarded > 0 ? `, ${plural(guarded, 'helper')} moved to the rules' model` : ''}.`)
+  // What Muka kept out of the context or caught, in one line.
+  if (trimSaved > 0 || wasteCount > 0 || guarded > 0) {
+    out.push(`**Saved by Muka:** ${trimSaved > 0 ? `~${kTokens(trimSaved)} tokens kept out by output trimming` : 'no output trimmed'} · ${plural(wasteCount, 'nudge')} · ${plural(guarded, 'guarded helper')}.`)
+  }
   // The costliest prompts, against the typical one of their size.
   const top = [...entries].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0)).slice(0, 3).filter(e => (e.costUsd ?? 0) > 0)
   if (top.length > 0) {
@@ -2784,11 +2791,13 @@ export const spendBar = (spend: Record<string, number> | undefined, budget: numb
 /** The views, each as one icon in the tab row; the label names it for a screen reader. 'report' is opened from the Bridge's Actions, not from this row. */
 export const VIEW_ICONS: { view: SavvyView; icon: string; label: string }[] = [
   { view: 'flow', icon: '🧭', label: 'Bridge' },
+  { view: 'menu', icon: '☰', label: 'Menu' },
   { view: 'activity', icon: '📜', label: 'Activity' },
   { view: 'steer', icon: '🎯', label: 'Steer' },
   { view: 'notes', icon: '⚠️', label: 'Alerts' },
   { view: 'radius', icon: '📝', label: 'Changes' },
   { view: 'cost', icon: '💲', label: 'Spend' },
+  { view: 'context', icon: '🧮', label: 'Context' },
   { view: 'reflect', icon: '💡', label: 'Reflect' },
   { view: 'rules', icon: '🧠', label: 'Rules' },
 ]
@@ -3095,6 +3104,8 @@ export const pulseLine = (info: MainInfo, list: SubAgent[], notes: Notice[], rec
     const ctx = info.ctxPercent !== undefined ? `ctx ${info.ctxPercent}%` : ''
     return [who, money, ctx].filter(Boolean).join('   ')
   }
+  // A long conversation, idle: a handoff to a fresh chat costs less than carrying it on.
+  if (info.handoffHint) return '📝 long chat: /muka handoff for a fresh start'
   // Idle with the cache about to lapse: the next prompt would pay for a full re-read.
   const cacheMs = cacheLeft(info, now)
   if (cacheMs !== undefined && cacheMs > 0 && cacheMs < 5 * 60_000) return `cache expires in ${Math.ceil(cacheMs / 60_000)}m: a pause now costs a full re-read`
@@ -3677,7 +3688,7 @@ export const nextVerify = (state: MainInfo['verify'], effect: 'edit' | 'check' |
   effect === 'edit' ? 'unverified' : effect === 'check' && state === 'unverified' ? 'verified' : state
 
 /** This prompt's efficiency counts, for the log: waste caught, helpers moved, the size Claude gave it. */
-const promptStats: { wasteCount: number; wasteTokens: number; guarded: number; size?: 'S' | 'M' | 'L' } = { wasteCount: 0, wasteTokens: 0, guarded: 0 }
+const promptStats: { wasteCount: number; wasteTokens: number; guarded: number; trimSaved: number; size?: 'S' | 'M' | 'L' } = { wasteCount: 0, wasteTokens: 0, guarded: 0, trimSaved: 0 }
 
 /** One thing a finished call wasted: what the agent is told, what Alerts lists, roughly how many tokens it cost. */
 export type WasteHit = { kind: 'reread' | 'retry' | 'big'; nudge: string; notice: string; tokens: number; rule?: string }
@@ -3744,6 +3755,270 @@ export const wasteCheck = (
   }
   return hits
 }
+
+// ---------------------------------------------------------------------------
+// Output trimming: with /muka trim on, a long successful Bash or PowerShell
+// result reaches the model cut down (its start, the lines that look like
+// errors, its end), with the full text saved to a file. The tool's own
+// result is replaced from the tool.call hook: `{ result }` beside the tool's
+// output record (stdout, stderr, ...), which core validates against the
+// tool's output schema and maps for the model. Read, Grep, Edit, agents and
+// MCP tools are never touched.
+
+export const TRIM_DEFAULT = 12_000
+export const TRIM_MIN = 1_000
+export const TRIM_MAX = 200_000
+const TRIM_KEEP = /error|fail|exception|warn|traceback|fatal|denied|not found/i
+const TRIM_LINES = 60
+const TRIM_LINE_CHARS = 240
+const TRIM_FILES = 30
+/** $.fs.write refuses more than 4 MiB; stay well under it (UTF-8 is up to 4 bytes a character). */
+const TRIM_SAVE_MAX = 1_000_000
+
+let trimOn = false
+let trimLimit = TRIM_DEFAULT
+
+/**
+ * Cuts a long output down: the first ~3,000 characters, every line of the cut
+ * middle that looks like an error (at most 60, deduped), the last ~3,000, and
+ * one line saying how much was cut and where the full text is. `savedAt` is
+ * the file the full text went to; absent, the line says it was not saved.
+ * Text within `limit`, or one the cut would not shorten, comes back as it was.
+ */
+export const trimOutput = (text: string, limit: number, savedAt?: string): string => {
+  if (text.length <= limit) return text
+  const edge = Math.min(3000, Math.max(1, Math.floor(limit / 4)))
+  let head = text.slice(0, edge)
+  const headBreak = head.lastIndexOf('\n')
+  if (headBreak >= edge * 0.8) head = head.slice(0, headBreak)
+  let tail = text.slice(text.length - edge)
+  const tailBreak = tail.indexOf('\n')
+  if (tailBreak >= 0 && tailBreak <= edge * 0.2) tail = tail.slice(tailBreak + 1)
+  const middle = text.slice(head.length, text.length - tail.length)
+  const seen = new Set<string>()
+  const found: string[] = []
+  for (const raw of middle.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (line === '' || seen.has(line) || !TRIM_KEEP.test(line)) continue
+    seen.add(line)
+    found.push(line.length > TRIM_LINE_CHARS ? `${line.slice(0, TRIM_LINE_CHARS - 1)}…` : line)
+    if (found.length >= TRIM_LINES) break
+  }
+  const cut = text.length - head.length - tail.length
+  const note = `[Muka cut ${cut} characters (~${kTokens(Math.round(cut / 4))} tokens) from the middle of this output; ${savedAt ? `the full output is in ${savedAt}` : 'the full output was not saved'}]`
+  const out = [head, ...(found.length > 0 ? ['[lines from the cut part that look like errors:]', ...found] : []), note, tail].join('\n')
+  return out.length < text.length ? out : text
+}
+
+/** Saves a full output to one of 30 rotating files under <home>/.claude/muka-outputs (the oldest is overwritten); the path, or undefined when it could not be saved. */
+const saveFullOutput = async ($: EngineInterface, tool: string, text: string): Promise<string | undefined> => {
+  try {
+    if (text.length > TRIM_SAVE_MAX) return undefined
+    const home = await homeDir($)
+    if (!home) return undefined
+    const n = Number(await $.store.get('trimSlot').catch(() => 0)) || 0
+    await $.store.set('trimSlot', n + 1)
+    const path = `${home}/.claude/muka-outputs/output-${String((n % TRIM_FILES) + 1).padStart(2, '0')}.txt`
+    await $.fs.write(path, `# ${tool} output saved by Muka at ${new Date().toISOString()}\n${text}`)
+    return path
+  } catch {
+    return undefined
+  }
+}
+
+/** A successful shell result with its long streams trimmed, and how many characters that kept out; undefined when nothing was trimmed. */
+const trimShellResult = async ($: EngineInterface, tool: string, result: unknown): Promise<{ result: Record<string, unknown>; saved: number } | undefined> => {
+  if (!trimOn || (tool !== 'Bash' && tool !== 'PowerShell') || !result || typeof result !== 'object') return undefined
+  const r = result as Record<string, unknown>
+  if (r.isImage === true || typeof r.backgroundTaskId === 'string') return undefined
+  const next: Record<string, unknown> = { ...r }
+  let saved = 0
+  for (const field of ['stdout', 'stderr'] as const) {
+    const text = r[field]
+    if (typeof text !== 'string' || text.length <= trimLimit) continue
+    const short = trimOutput(text, trimLimit, await saveFullOutput($, tool, text))
+    if (short.length >= text.length) continue
+    next[field] = short
+    saved += text.length - short.length
+  }
+  return saved > 0 ? { result: next, saved } : undefined
+}
+
+// ---------------------------------------------------------------------------
+// The context breakdown: what Muka can measure of Main's context this
+// conversation (the rules and notes it injected, the tool results by kind).
+// The rest is whatever the engine counts that Muka cannot see.
+
+export type CtxFamily = 'read' | 'shell' | 'search' | 'mcp' | 'agents' | 'other'
+/** Characters Muka saw go into Main's context: its rules and notes, and tool results by kind. */
+export type CtxSeen = { rules: number; notes: number; tools: Record<CtxFamily, number> }
+export const newCtxSeen = (): CtxSeen => ({ rules: 0, notes: 0, tools: { read: 0, shell: 0, search: 0, mcp: 0, agents: 0, other: 0 } })
+const ctxSeen = newCtxSeen()
+
+/** The kind a tool's result counts under. */
+export const ctxFamily = (tool: string): CtxFamily =>
+  tool === 'Read'
+    ? 'read'
+    : tool === 'Bash' || tool === 'PowerShell'
+      ? 'shell'
+      : tool === 'Grep' || tool === 'Glob'
+        ? 'search'
+        : tool.startsWith('mcp__')
+          ? 'mcp'
+          : tool === 'Agent' || tool === 'Task' || tool === 'SendMessage'
+            ? 'agents'
+            : 'other'
+
+const CTX_LABEL: Record<CtxFamily, string> = { read: 'Read results', shell: 'Bash / PowerShell', search: 'Grep / Glob', mcp: 'MCP tools', agents: "Agents' reports", other: 'Other tools' }
+export const CTX_OTHER = 'other (system prompt, tools, conversation)'
+
+/** A new conversation empties everything; a compaction empties the tool results and notes but keeps the rules block. */
+const resetCtx = (keepRules: boolean): void => {
+  const rules = ctxSeen.rules
+  Object.assign(ctxSeen, newCtxSeen())
+  if (keepRules) ctxSeen.rules = rules
+}
+
+export type CtxRow = { key: string; label: string; tokens: number; hue: string }
+
+/** The rows of the breakdown (tokens are characters / 4) and the engine's own total, with the remainder Muka cannot see. */
+export const contextRows = (info: MainInfo, seen: CtxSeen): { rows: CtxRow[]; seenTokens: number; total: number | undefined; rest: number | undefined } => {
+  const tok = (chars: number) => Math.round(chars / 4)
+  const hues: Record<CtxFamily, string> = { read: H.green, shell: H.amber, search: H.blue, mcp: H.pink, agents: H.done, other: H.text }
+  const rows: CtxRow[] = [
+    { key: 'notes', label: 'Rules + Muka notes', tokens: tok(seen.rules + seen.notes), hue: H.cyan },
+    ...(Object.keys(CTX_LABEL) as CtxFamily[]).map(f => ({ key: f, label: CTX_LABEL[f], tokens: tok(seen.tools[f]), hue: hues[f] })),
+  ]
+  const seenTokens = rows.reduce((n, r) => n + r.tokens, 0)
+  const total = info.ctxTokens
+  return { rows, seenTokens, total, rest: total === undefined ? undefined : Math.max(0, total - seenTokens) }
+}
+
+/** The breakdown as a HUD card: a stacked bar, a row per part, and the engine's total. */
+export const contextCard = (info: MainInfo, seen: CtxSeen): Card => {
+  const W = HELM_W
+  const { rows, seenTokens, total, rest } = contextRows(info, seen)
+  const denom = Math.max(total ?? 0, seenTokens, 1)
+  const x0 = 20
+  const track = W - 40
+  const right = info.ctxPercent === undefined || total === undefined ? 'no reading yet' : `${Math.round(info.ctxPercent)}% · ${kTokens(total)} / ${kTokens(info.ctxWindow)}`
+  const parts: string[] = [
+    `<text x="20" y="28" class="hl">CONTEXT · WHAT MUKA SAW</text>`,
+    `<text x="${W - 20}" y="28" class="hl" text-anchor="end">${xml(right)}</text>`,
+    `<rect x="${x0}" y="40" width="${track}" height="14" rx="4" fill="${H.track}"/>`,
+  ]
+  let at = x0
+  const segs = [...rows, ...(rest ? [{ key: 'rest', label: CTX_OTHER, tokens: rest, hue: H.faint }] : [])]
+  for (const r of segs) {
+    const w = (track * r.tokens) / denom
+    if (w < 0.5) continue
+    parts.push(`<rect x="${at.toFixed(1)}" y="40" width="${w.toFixed(1)}" height="14" fill="${r.hue}" fill-opacity="${r.key === 'rest' ? 0.35 : 0.85}"/>`)
+    at += w
+  }
+  parts.push(`<rect x="${x0}" y="40" width="${track}" height="14" rx="4" fill="none" stroke="${H.line}"/>`)
+  const all = [...rows, { key: 'rest', label: CTX_OTHER, tokens: rest ?? 0, hue: H.faint }]
+  all.forEach((r, i) => {
+    const y = 80 + i * 22
+    const isRest = r.key === 'rest'
+    const dim = r.tokens === 0 && !isRest
+    const value = isRest && rest === undefined ? 'no reading' : `~${kTokens(r.tokens)}${total ? ` · ${Math.round((100 * r.tokens) / Math.max(total, 1))}%` : ''}`
+    parts.push(
+      `<g class="row"><title>${xml(`${r.label}: ${value}`)}</title>` +
+        `<rect x="20" y="${y - 9}" width="9" height="9" rx="2" fill="${r.hue}" fill-opacity="${dim ? 0.3 : 0.9}"/>` +
+        `<text x="36" y="${y}" class="ht" style="font-size:${isRest ? 10 : 12}px${dim ? `;fill:${H.faint}` : ''}">${xml(r.label)}</text>` +
+        `<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="font-size:12px${dim ? `;fill:${H.faint}` : ''}">${xml(value)}</text></g>`,
+    )
+  })
+  const yEnd = 80 + all.length * 22 + 6
+  parts.push(`<text x="20" y="${yEnd}" class="hs" style="font-size:10px;fill:${H.faint}">${xml('Muka counts its notes and tool results (characters / 4).')}</text>`)
+  const Hh = yEnd + 16
+  const alt = `Context: ${right}. What Muka saw: ${rows.filter(r => r.tokens > 0).map(r => `${r.label} ~${kTokens(r.tokens)}`).join(', ') || 'nothing yet'}; ${CTX_OTHER}: ${rest === undefined ? 'no reading yet' : `~${kTokens(rest)}`}.`
+  return { source: card(W, Hh, parts.join('')), alt: clip(alt, 600) }
+}
+
+/** The same breakdown as plain text, for /muka context and the terminal. */
+export const contextText = (info: MainInfo, seen: CtxSeen): string => {
+  const { rows, total, rest } = contextRows(info, seen)
+  const head =
+    info.ctxPercent === undefined || total === undefined
+      ? 'Muka context: no reading from the engine yet.'
+      : `Muka context: ${Math.round(info.ctxPercent)}% full (${kTokens(total)} of ${kTokens(info.ctxWindow)} tokens, the engine's own count).`
+  return [
+    head,
+    'What Muka saw go into Main this conversation (tokens ~ characters / 4):',
+    ...rows.map(r => `- ${r.label}: ~${kTokens(r.tokens)}`),
+    `- ${CTX_OTHER}: ${rest === undefined ? 'no reading yet' : `~${kTokens(rest)}`}`,
+    'Muka only counts its own notes and the tool results Main read; everything else is in the last line.',
+  ].join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Handoff and the compact hint. A long conversation (4 hours of Main's turns,
+// or 300 steps) is worth handing to a fresh chat; a finished plan step on a
+// context over 40% is a clean place to /compact.
+
+export const HANDOFF_MS = 4 * 3600 * 1000
+export const HANDOFF_STEPS = 300
+export const COMPACT_MIN_PERCENT = 40
+export const COMPACT_EVERY_MS = 20 * 60 * 1000
+
+/** The note that asks Main to write the handoff. */
+export const handoffNote = (root?: string): string => {
+  const dir = root ? `${root.replace(/\\/g, '/').replace(/\/+$/, '')}/` : ''
+  return `Write a handoff for a fresh chat: goal, what is done, what is left, key decisions, files touched, how to verify, in at most 300 words, to ${dir}.claude/handoff.md; then tell the user to start a new chat and say "continue from .claude/handoff.md".`
+}
+
+/** The note that asks Main to compact now. */
+export const compactNote = (percent: number | undefined): string =>
+  `Muka: ${percent !== undefined ? `the context is ${Math.round(percent)}% full and a` : 'a'} plan step just finished, a clean place to compact. Run /compact now (tell the user you are doing so), then carry on with the next step.`
+
+/** Main's conversation so far: turn time and steps, and when the hints last went. */
+const convo = { turnMs: 0, steps: 0, handoffHinted: false, compactHintAt: -Infinity }
+
+/** Why this conversation is worth handing off, or undefined while it is not long yet. */
+export const handoffDue = (c: { turnMs: number; steps: number }): string | undefined =>
+  c.turnMs >= HANDOFF_MS ? `${duration(c.turnMs)} of turns` : c.steps >= HANDOFF_STEPS ? `${c.steps} steps` : undefined
+
+/** Whether a finished plan step should bring the compact hint now: a step completed, context over 40%, and 20 minutes since the last hint. */
+export const compactDue = (before: PlanItem[] | undefined, after: PlanItem[] | undefined, percent: number | undefined, now: number, lastAt: number): boolean => {
+  const done = (p: PlanItem[] | undefined) => (p ?? []).filter(i => i.status === 'completed').length
+  return done(after) > done(before) && percent !== undefined && percent > COMPACT_MIN_PERCENT && now - lastAt >= COMPACT_EVERY_MS
+}
+
+// ---------------------------------------------------------------------------
+// What the engine tells a plugin about the prompt cache: no cause for a miss
+// (the types expose none), but the tool list, whose changes can empty it.
+
+/** A cause the engine itself names for a cache miss, if any source carries one (the types expose none today). */
+export const engineMissCause = (...sources: unknown[]): string | undefined => {
+  for (const s of sources) {
+    if (!s || typeof s !== 'object') continue
+    const o = s as Record<string, unknown>
+    const v = o.last_miss_cause ?? o.cache_miss_cause ?? o.lastMissCause
+    if (typeof v === 'string' && clean(v) !== '') return clean(v)
+  }
+  return undefined
+}
+
+/** The tool server behind an MCP tool name (mcp__<server>__<tool>). */
+export const serverOf = (tool: string): string => tool.match(/^mcp__(.+?)__/)?.[1] ?? tool
+
+/** The servers that joined or left between two readings of the tool list, sorted. */
+export const serverChanges = (before: ReadonlySet<string>, after: ReadonlySet<string>): string[] =>
+  [...new Set([...before].filter(s => !after.has(s)).concat([...after].filter(s => !before.has(s))))].sort()
+
+/** The tool servers in the session now, from the engine's tool list; undefined when it cannot be read. */
+const readServers = async ($: EngineInterface): Promise<Set<string> | undefined> => {
+  try {
+    const list = await Promise.resolve($.tool.list())
+    return new Set(list.filter(t => t.mcp).map(t => serverOf(t.name)))
+  } catch {
+    return undefined
+  }
+}
+
+/** The tool servers as of Main's first finished turn; later turns are compared with it. */
+let knownServers: Set<string> | undefined
 
 // ---------------------------------------------------------------------------
 // Smarter rules: a short core in every chat; the full large-task steps join
@@ -3905,19 +4180,27 @@ export const CACHE_DROP_MIN_INPUT = 20_000
 export const CACHE_DROP_POINTS = 30
 
 /** What Muka saw since the previous turn that could have emptied the cache. */
-const cacheSeen = { compacted: false, changed: false, gapMs: 0 }
+const cacheSeen = { compacted: false, changed: false, gapMs: 0, tools: '' }
 
 /** Whether a turn's cache rate fell enough, on enough input, to be called a drop. */
 export const isCacheDrop = (prev: number | undefined, now: number | undefined, inputTokens: number): boolean =>
   prev !== undefined && now !== undefined && inputTokens >= CACHE_DROP_MIN_INPUT && prev - now >= CACHE_DROP_POINTS
 
-/** The likeliest cause of a cache drop, from what Muka saw since the previous turn. */
-export const cacheDropCause = (seen: { gapMs: number; ttlMin: number; modelChanged: boolean; compacted: boolean; changed: boolean }): string =>
-  seen.gapMs > seen.ttlMin * 60_000
+/**
+ * The cause of a cache drop. A cause the engine itself names wins (`engine`:
+ * the types expose none today, so this stays empty); otherwise the likeliest
+ * from what Muka saw since the previous turn.
+ */
+export const cacheDropCause = (seen: { gapMs: number; ttlMin: number; modelChanged: boolean; compacted: boolean; changed: boolean; tools?: string; engine?: string }): string =>
+  seen.engine
+    ? seen.engine
+    : seen.gapMs > seen.ttlMin * 60_000
     ? `an idle gap (${duration(seen.gapMs)}) longer than the ${seen.ttlMin}-minute cache lifetime`
     : seen.modelChanged
       ? 'the model changed'
-      : seen.compacted
+      : seen.tools
+        ? `the tool list changed (${seen.tools})`
+        : seen.compacted
         ? 'the context was compacted'
         : seen.changed
           ? 'a rule or setting was toggled, or plugins reloaded'
@@ -3947,6 +4230,9 @@ const cacheStatus = async ($: EngineInterface): Promise<string> => {
   return [
     `Muka cache: ${state}. TTL ${cacheTtlMin} minutes (/muka cache ttl <minutes> to change it).`,
     rate !== undefined ? `Last turn: ${rate}% of its input came from the cache.` : 'Last turn: no cache numbers yet.',
+    ...(info.cacheDrop
+      ? [`Last drop: ${info.cacheDrop.from}% to ${info.cacheDrop.to}% at ${clock(info.cacheDrop.at)}. Cause: ${info.cacheDrop.cause} (${info.cacheDrop.source === 'engine' ? 'named by the engine' : "Muka's guess: the engine names no cause to plugins"}).`]
+      : ['No cache drop seen this chat.']),
   ].join('\n')
 }
 
@@ -3960,6 +4246,7 @@ const setSmart = async ($: EngineInterface, want: boolean): Promise<{ text: stri
     const note = want
       ? `Muka smart is now on. From now on, follow these coordination rules:\n\n${MUKA_RULES}`
       : 'Muka smart is now off. The Muka coordination rules (task sizes, plan then swarm, helper models, stop rules, question rules) no longer apply in this chat; work as you normally would.'
+    ctxSeen.notes += note.length
     await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } }).catch(() => undefined)
   }
   return {
@@ -3990,6 +4277,7 @@ export const setRules = async ($: EngineInterface, ids: readonly string[], want:
     const note = want
       ? `Muka: the ${one ? 'rule' : 'rules'} ${titles(changed)} ${one ? 'is' : 'are'} now on. From now on, follow ${one ? 'it' : 'them'}:\n\n${changed.map(r => r.text).join('\n\n')}`
       : `Muka: the ${one ? 'rule' : 'rules'} ${titles(changed)} ${one ? 'is' : 'are'} now off and no longer ${one ? 'applies' : 'apply'} in this chat.`
+    ctxSeen.notes += note.length
     await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } }).catch(() => undefined)
   }
   const verb = want ? 'on' : 'off'
@@ -4028,6 +4316,10 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     `- Motion: ${motionOn ? 'on' : 'off'} (/muka motion on, /muka motion off)`,
     `- Waste nudges: ${nudgesOn ? 'on' : 'off'} (/muka nudges on, /muka nudges off)`,
     `- Model guard: ${modelGuardOn ? 'on' : 'off'} (/muka models on, /muka models off)`,
+    `- Output trimming: ${trimOn ? 'on' : 'off'}, over ${trimLimit} characters (/muka trim on, /muka trim off, /muka trim <chars>)`,
+    '- Context: /muka context (what filled Main\'s context: rules and notes, tool results by kind)',
+    '- Handoff: /muka handoff (Main writes .claude/handoff.md for a fresh chat); /muka compact (hint Main to /compact now)',
+    '- Menu: /muka menu opens the ☰ tab, a button for every command',
     '- Report: /muka report (the last 7 days: spend by model, helper and size, waste caught, suggestions)',
     '- REA (Reverse Engineer Anything): /muka rea (status), /muka rea setup (install or update), /muka rea doctor',
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
@@ -4389,6 +4681,39 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     await setMotion($, want)
     return { text: want ? 'Muka motion on: the panel\'s pictures move (unless your system asks to reduce motion).' : 'Muka motion off: the panel\'s pictures stay still.' }
   }
+  if (words[0] === 'trim') {
+    const n = Number(words[1])
+    if (words[1] !== undefined && words[1] !== 'on' && words[1] !== 'off' && !Number.isFinite(n)) return { text: 'Use /muka trim on, /muka trim off, or /muka trim <characters> (the threshold).' }
+    if (Number.isFinite(n) && words[1] !== undefined) {
+      if (n < TRIM_MIN || n > TRIM_MAX) return { text: `Muka trim threshold: ${TRIM_MIN} to ${TRIM_MAX} characters (now ${trimLimit}).` }
+      trimLimit = Math.floor(n)
+      await $.store.set('trimLimit', trimLimit)
+      return { text: `Muka trim threshold: ${trimLimit} characters. Output trimming is ${trimOn ? 'on' : 'off'}.` }
+    }
+    if (words[1] === undefined) return { text: `Muka output trimming is ${trimOn ? 'on' : 'off'}, over ${trimLimit} characters. Use /muka trim on, /muka trim off, or /muka trim <characters>.` }
+    trimOn = words[1] === 'on'
+    await $.store.set('trim', trimOn)
+    return {
+      text: trimOn
+        ? `Muka output trimming on: a Bash or PowerShell result over ${trimLimit} characters reaches the model as its start, its error lines and its end; the full text is saved under .claude/muka-outputs. Read, Grep, Edit, agents and MCP tools are never trimmed.`
+        : 'Muka output trimming off: every result reaches the model whole.',
+    }
+  }
+  if (words[0] === 'context') return { text: contextText(await read($, main), ctxSeen) }
+  if (words[0] === 'handoff') {
+    await update($, main, m => (m.handoffHint ? { ...m, handoffHint: false } : m))
+    await sendToMany($, handoffNote(projectRoot), { main: true, helpers: false })
+    await refreshStatus($)
+    return { text: 'Muka handoff: Main is asked to write .claude/handoff.md (goal, done, left, decisions, files, how to verify) and to tell you to start a new chat. It reads the note at its next step.' }
+  }
+  if (words[0] === 'compact') {
+    await sendToMany($, compactNote((await read($, main)).ctxPercent), { main: true, helpers: false })
+    return { text: 'Muka compact hint: Main is asked to run /compact at its next step.' }
+  }
+  if (words[0] === 'menu') {
+    await update($, view, () => 'menu')
+    return { text: 'Muka menu: the ☰ tab of the panel has a button for every command.' }
+  }
   if (words[0] === 'all') {
     const want = words[1] !== 'off'
     if (want) await turnOn($)
@@ -4432,7 +4757,7 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'muka',
-      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday], /muka cache [ttl N], /muka audit',
+      description: 'Muka: /muka (status), /muka on|off (panel), /muka smart on|off (rules), /muka rules, /muka rule <id> on|off, /muka all on|off, /muka setup [undo], /muka budget N|off, /muka guard on|off, /muka ping on|off, /muka recap [yesterday], /muka cache [ttl N], /muka audit, /muka trim on|off|<chars>, /muka context, /muka handoff, /muka compact, /muka menu',
     })
     // On in every chat unless /savvy off turned it off; the delete guard is off
     // (it never asks) unless /savvy guard on turned it on.
@@ -4443,6 +4768,14 @@ export const register: Register = on => {
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
     modelGuardOn = (await $.store.get('models')) === true
+    trimOn = (await $.store.get('trim')) === true
+    const storedTrim = await $.store.get('trimLimit').catch(() => undefined)
+    trimLimit = typeof storedTrim === 'number' && storedTrim >= TRIM_MIN && storedTrim <= TRIM_MAX ? storedTrim : TRIM_DEFAULT
+    // A new conversation: nothing is counted yet.
+    resetCtx(false)
+    Object.assign(convo, { turnMs: 0, steps: 0, handoffHinted: false, compactHintAt: -Infinity })
+    knownServers = undefined
+    cacheSeen.tools = ''
     const storedOff = await $.store.get('rulesOff').catch(() => undefined)
     applyRulesOff(Array.isArray(storedOff) ? storedOff : [])
     for (const k of Object.keys(ruleHits)) delete ruleHits[k]
@@ -4470,6 +4803,7 @@ export const register: Register = on => {
     projectRoot = e.cwd
     // A review cut off by a reload or a restart left its busy flag behind.
     await update($, reflection, r => (r.isBusy ? { ...r, isBusy: false } : r))
+    await update($, main, m => (m.handoffHint ? { ...m, handoffHint: false } : m))
     startTicker($)
     if (isOn) {
       void $.ui.open({ id: PANE, title: TITLE })
@@ -4490,7 +4824,9 @@ export const register: Register = on => {
     // it. (The sizing tune rides the first prompt instead, see prompt.submit.)
     const storedOff = await $.store.get('rulesOff').catch(() => undefined)
     const off = Array.isArray(storedOff) ? storedOff.filter((x): x is string => typeof x === 'string') : rulesOff
-    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: coreText(off) }] })
+    const rules = coreText(off)
+    ctxSeen.rules = rules.length
+    return next({ ...e, blocks: [...e.blocks.filter(b => b.name !== 'mukaRules'), { name: 'mukaRules', text: rules }] })
   })
 
   // A prompt that looks large brings the full large-task steps with it, once
@@ -4514,7 +4850,10 @@ export const register: Register = on => {
 
 ${largeText(rulesOff)}`)
         }
-        if (extra.length > 0) return next({ ...e, context: [...(e.context ?? []), ...extra] })
+        if (extra.length > 0) {
+          ctxSeen.notes += extra.reduce((n, t) => n + t.length, 0)
+          return next({ ...e, context: [...(e.context ?? []), ...extra] })
+        }
       }
     } catch {
       // Best effort: the prompt goes in as typed.
@@ -4666,10 +5005,31 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
     try {
       if (ran.deny === undefined && !isGuardQuestion && !isOwnPush) {
         const notes = await takeSteerNotes($, e.agentId)
-        if (notes.length > 0) out = { ...ran, context: [...(ran.context ?? []), ...notes.map(n => (n.from === 'muka' ? n.text : steerContext(n)))] } as typeof ran
+        if (notes.length > 0) {
+          const texts = notes.map(n => (n.from === 'muka' ? n.text : steerContext(n)))
+          out = { ...ran, context: [...(ran.context ?? []), ...texts] } as typeof ran
+          if (e.agentId === undefined) ctxSeen.notes += texts.reduce((n, t) => n + t.length, 0)
+        }
       }
     } catch {
       // Best effort: the result goes back as it came.
+    }
+    // Output trimming (off unless /muka trim on): a long successful shell result
+    // is answered in place with a shorter one. The original `ran` stays what the
+    // step recording and the checks below read; only what the model reads changes.
+    let trimmedChars = 0
+    try {
+      if (ran.deny === undefined && ran.isError !== true && !isGuardQuestion && !isOwnPush) {
+        const trimmed = await trimShellResult($, e.tool, ran.result)
+        if (trimmed) {
+          trimmedChars = trimmed.saved
+          out = { result: trimmed.result, ...(out.context ? { context: out.context } : {}) } as typeof ran
+          promptStats.trimSaved += trimmed.saved
+          await addNotice($, 'waste', who, `trimmed ${e.tool} output: ~${kTokens(Math.round(trimmed.saved / 4))} tokens saved`).catch(() => undefined)
+        }
+      }
+    } catch {
+      // Best effort: the result goes back whole.
     }
     // Waste catchers: a re-read, a retry loop or a huge result is pointed out
     // on this very result; a filling context waits for Main's next one.
@@ -4681,7 +5041,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         const recover = ruleOn('recover')
         const hits =
           nudgesOn || recover
-            ? wasteCheck(wasteState, { agent: e.agentId ?? 'main', tool: e.tool, args, isError: ran.isError === true, text: typeof ran.text === 'string' ? ran.text : '', at: Date.now() }, { recover }).filter(
+            ? wasteCheck(wasteState, { agent: e.agentId ?? 'main', tool: e.tool, args, isError: ran.isError === true, text: typeof ran.text === 'string' ? ran.text.slice(0, Math.max(0, ran.text.length - trimmedChars)) : '', at: Date.now() }, { recover }).filter(
                 h => nudgesOn || h.rule === 'recover',
               )
             : []
@@ -4696,6 +5056,12 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         }
         const extra = [...hits.map(h => h.nudge), ...(e.agentId === undefined ? wasteState.pendingMain.splice(0) : [])]
         if (extra.length > 0) out = { ...out, context: [...(out.context ?? []), ...extra] } as typeof ran
+        // What Main's context took in: this result (as the model read it), the notes beside it, one more step.
+        if (e.agentId === undefined) {
+          ctxSeen.tools[ctxFamily(e.tool)] += Math.max(0, (typeof ran.text === 'string' ? ran.text.length : 0) - trimmedChars)
+          ctxSeen.notes += extra.reduce((n, t) => n + t.length, 0)
+          convo.steps += 1
+        }
         for (const h of hits) {
           promptStats.wasteCount += 1
           promptStats.wasteTokens += h.tokens
@@ -4743,6 +5109,16 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
           const plan = applyPlan(before, e.tool, args)
           if (plan) {
             await update($, main, m => ({ ...m, plan }))
+            // A finished step on a context over 40%: a clean place to /compact (at most one hint in 20 minutes).
+            if (nudgesOn || ruleOn('context')) {
+              const at = await clockNow($)
+              const pct = (await read($, main)).ctxPercent
+              if (compactDue(before, plan, pct, at, convo.compactHintAt)) {
+                convo.compactHintAt = at
+                wasteState.pendingMain.push(compactNote(pct))
+                await addNotice($, 'waste', 'Main', `plan step done at ${Math.round(pct ?? 0)}% context: told to /compact`)
+              }
+            }
             await refreshStatus($)
           }
         }
@@ -4814,6 +5190,18 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       } catch {
         cacheSeen.gapMs = 0
       }
+      // A tool server that joined or left since Main's last turn changes the tool list, which can empty the cache.
+      if (knownServers !== undefined) {
+        const now = await readServers($)
+        if (now) {
+          const changed = serverChanges(knownServers, now)
+          knownServers = now
+          if (changed.length > 0) {
+            cacheSeen.tools = changed.join(', ')
+            await addNotice($, 'waste', 'Muka', `tool list changed: ${changed.join(', ')} (this can reset the cache)`).catch(() => undefined)
+          }
+        }
+      }
     }
     if (e.agentId !== undefined) {
       // A subagent woken again (a follow-up message) is running again.
@@ -4826,7 +5214,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       await update($, selected, () => '')
       await update($, activity, () => [])
       await update($, focus, () => '')
-      Object.assign(promptStats, { wasteCount: 0, wasteTokens: 0, guarded: 0, size: undefined })
+      Object.assign(promptStats, { wasteCount: 0, wasteTokens: 0, guarded: 0, trimSaved: 0, size: undefined })
       mainCalls = 0
       sizeAsked = false
       verifyFlagged = false
@@ -4876,16 +5264,34 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         const prevRate = cacheRate(prior.usage)
         const input = usage ? usage.input + usage.cacheRead + usage.cacheWrite : 0
         if (e.reason !== 'aborted' && isCacheDrop(prevRate, curRate, input)) {
+          const engine = engineMissCause(e, e.usage)
           const cause = cacheDropCause({
             gapMs: cacheSeen.gapMs,
             ttlMin: cacheTtlMin,
             modelChanged: prior.model !== undefined && model !== undefined && prior.model !== model,
             compacted: cacheSeen.compacted,
             changed: cacheSeen.changed,
+            tools: cacheSeen.tools,
+            engine,
           })
+          await update($, main, m => ({ ...m, cacheDrop: { at: Date.now(), from: prevRate ?? 0, to: curRate ?? 0, cause, source: engine ? ('engine' as const) : ('guess' as const) } }))
           await ruleHit($, 'context', 'Main', `cache dropped ${prevRate}% → ${curRate}%: ${cause}`)
         }
-        if (e.reason !== 'aborted') Object.assign(cacheSeen, { compacted: false, changed: false, gapMs: 0 })
+        if (e.reason !== 'aborted') Object.assign(cacheSeen, { compacted: false, changed: false, gapMs: 0, tools: '' })
+        // The tool servers as of Main's first finished turn: later turns are compared with this.
+        if (knownServers === undefined) knownServers = await readServers($)
+      } catch {
+        // Best effort.
+      }
+      // A long conversation (4 hours of turns or 300 steps): a handoff to a fresh chat is suggested once.
+      try {
+        if (e.reason !== 'aborted') convo.turnMs += e.durationMs
+        const why = handoffDue(convo)
+        if (nudgesOn && why && !convo.handoffHinted) {
+          convo.handoffHinted = true
+          await update($, main, m => ({ ...m, handoffHint: true }))
+          await addNotice($, 'waste', 'Muka', `this chat is long (${why}): /muka handoff writes a handoff so a fresh chat can continue`)
+        }
       } catch {
         // Best effort.
       }
@@ -4926,6 +5332,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         wasteCount: promptStats.wasteCount,
         wasteTokens: promptStats.wasteTokens,
         guarded: promptStats.guarded,
+        ...(promptStats.trimSaved > 0 ? { trimSavedTokens: Math.round(promptStats.trimSaved / 4) } : {}),
         ...(promptStats.size ? { size: promptStats.size } : {}),
       }).catch(() => undefined)
       await pingDone($, info, e.durationMs).catch(() => undefined)
@@ -4966,6 +5373,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         sizingSent = false
         cacheSeen.compacted = true
         wasteState.reads.clear()
+        // The tool results and notes are summarized away; the rules block stays.
+        resetCtx(true)
       }
       lastCtx = ctx.percent
     }
@@ -5171,6 +5580,117 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       return page([
         <Button key="report-back" label="← Bridge" onPress={() => update($, view, () => 'flow')} />,
         <Markdown text={text} />,
+      ])
+    }
+
+    if (current === 'context') {
+      // What filled Main's context: Muka's own count of its notes and the tool results, against the engine's total.
+      if (isDesk) return page([pic(contextCard(info, ctxSeen)), <Text dimColor>Counts reset in a new chat and after a compaction. /muka context prints the same.</Text>])
+      return page([<Text bold>Context: what filled Main's context</Text>, ...contextText(info, ctxSeen).split('\n').map(l => <Text>{l}</Text>)])
+    }
+
+    if (current === 'menu') {
+      // A button for every command. Switches show their state (primary: on); info buttons print into the result area below.
+      const redraw = () => update($, tick, n => n + 1)
+      const toast = (text: string) => Promise.resolve($.ui.toast(text)).catch(() => undefined)
+      const result = await read($, menuResult)
+      const waiting = await read($, menuConfirm)
+      const nowMs = await clockNow($)
+      const switchBtn = (key: string, label: string, isOnNow: boolean, run: () => Promise<unknown>) => (
+        <Button key={`menu-${key}`} label={`${label}: ${isOnNow ? 'on' : 'off'}`} variant={isOnNow ? 'primary' : 'secondary'} onPress={async () => { await run(); await redraw() }} />
+      )
+      const go = (key: string, label: string, v: SavvyView) => <Button key={`menu-${key}`} label={label} onPress={() => goTo(v)} />
+      const act = (key: string, label: string, run: () => Promise<unknown>) => <Button key={`menu-${key}`} label={label} onPress={async () => { await run(); await redraw() }} />
+      // Runs a /muka command and shows what it printed.
+      const info_ = (key: string, label: string, words: string) => (
+        <Button key={`menu-${key}`} label={label} onPress={async () => { const r = await runCommand($, words); await update($, menuResult, () => r.text) }} />
+      )
+      // A button that needs a second press within 10 seconds.
+      const sure = (key: string, label: string, words: string) => {
+        const isWaiting = waiting.key === key && nowMs - waiting.at <= 10_000
+        return (
+          <Button
+            key={`menu-${key}`}
+            label={isWaiting ? 'Press again to confirm' : label}
+            variant={isWaiting ? 'primary' : 'secondary'}
+            onPress={async () => {
+              const at = await clockNow($)
+              const first = await read($, menuConfirm)
+              if (first.key === key && at - first.at <= 10_000) {
+                await update($, menuConfirm, () => ({ key: '', at: 0 }))
+                const r = await runCommand($, words)
+                await update($, menuResult, () => r.text)
+                return
+              }
+              await update($, menuConfirm, () => ({ key, at }))
+              await toast('Press again within 10 seconds to confirm')
+              // The label goes back after 10 seconds.
+              void $.clock.sleep(10_000).then(async () => {
+                if ((await read($, menuConfirm)).at === at) await update($, menuConfirm, () => ({ key: '', at: 0 }))
+              }).catch(() => undefined)
+            }}
+          />
+        )
+      }
+      const nextBudgetStep = defaultBudget === undefined ? BUDGET_STEPS[0] : BUDGET_STEPS.find(s => s > defaultBudget!)
+      const group = (title: string, buttons: RenderChildren[]) => (
+        <Box key={`menu-group-${title}`} flexDirection="column" gap={1}>
+          <Text bold>{title}</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {buttons}
+          </Box>
+        </Box>
+      )
+      const cmd = (words: string) => () => runCommand($, words)
+      return page([
+        group('Switches', [
+          switchBtn('rules', '🧠 Panel rules', isSmart, () => setSmart($, !isSmart)),
+          switchBtn('nudges', '♻️ Nudges', nudgesOn, cmd(`nudges ${nudgesOn ? 'off' : 'on'}`)),
+          switchBtn('models', '🛡 Model guard', modelGuardOn, cmd(`models ${modelGuardOn ? 'off' : 'on'}`)),
+          switchBtn('guard', '🗑 Delete guard', isGuardOn, cmd(`guard ${isGuardOn ? 'off' : 'on'}`)),
+          switchBtn('pings', '🔔 Pings', pingsOn, cmd(`ping ${pingsOn ? 'off' : 'on'}`)),
+          switchBtn('motion', '✨ Motion', motionOn, () => setMotion($, !motionOn)),
+          switchBtn('trim', '✂️ Trim', trimOn, cmd(`trim ${trimOn ? 'off' : 'on'}`)),
+          <Button
+            key="menu-budget"
+            label={`💲 Budget cycle: ${defaultBudget === undefined ? 'off' : `$${defaultBudget}`}`}
+            variant={defaultBudget === undefined ? 'secondary' : 'primary'}
+            onPress={async () => { await runCommand($, `budget ${nextBudgetStep ?? 'off'}`); await redraw() }}
+          />,
+        ]),
+        group('Views', [
+          go('view-rules', '🧠 Rules', 'rules'),
+          go('view-context', '🧮 Context', 'context'),
+          go('view-report', '📊 Report', 'report'),
+          go('view-alerts', '⚠️ Alerts', 'notes'),
+          go('view-changes', '📝 Changes', 'radius'),
+          go('view-activity', '📜 Activity', 'activity'),
+        ]),
+        group('Actions', [
+          act('wrap', '⏸ Wrap up all', () => sendToMany($, STEER_PRESETS.find(p => p.key === 'wrap')!.text, { main: true, helpers: true })),
+          act('stop', '⏹ Stop helpers', () => sendToMany($, STOP_HELPERS_NOTE, { main: false, helpers: true })),
+          act('verify', '✅ Verify', () => sendToMany($, VERIFY_NOTE, { main: true, helpers: false })),
+          info_('handoff', '📝 Handoff', 'handoff'),
+          info_('compact', '🗜 Compact hint', 'compact'),
+        ]),
+        group('Info', [
+          info_('info-status', 'Status', 'status'),
+          info_('info-cache', 'Cache', 'cache'),
+          info_('info-audit', 'Audit', 'audit'),
+          info_('info-recap-today', 'Recap today', 'recap'),
+          info_('info-recap-yesterday', 'Recap yesterday', 'recap yesterday'),
+          info_('info-rules', 'Rules list', 'rules'),
+        ]),
+        group('Tools', [
+          info_('rea-status', 'REA status', 'rea'),
+          sure('rea-setup', 'REA setup', 'rea setup'),
+          info_('rea-doctor', 'REA doctor', 'rea doctor'),
+          info_('setup', 'Setup', 'setup'),
+          sure('setup-undo', 'Setup undo', 'setup undo'),
+        ]),
+        <Text bold>Result</Text>,
+        result === '' ? <Text dimColor>The Info and Tools buttons print here.</Text> : <Markdown text={result.replace(/\n/g, '  \n')} />,
+        result === '' ? <Text> </Text> : <Button key="menu-clear" label="Clear" onPress={() => update($, menuResult, () => '')} />,
       ])
     }
 
@@ -5613,6 +6133,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
             {toggle('ctl-guard', '🗑 Delete guard', isGuardOn, cmd(`guard ${isGuardOn ? 'off' : 'on'}`))}
             {toggle('ctl-pings', '🔔 Pings', pingsOn, cmd(`ping ${pingsOn ? 'off' : 'on'}`))}
             {toggle('ctl-motion', '✨ Motion', motionOn, () => setMotion($, !motionOn))}
+            {toggle('ctl-trim', '✂️ Trim', trimOn, cmd(`trim ${trimOn ? 'off' : 'on'}`))}
             <Button
               key="ctl-budget"
               label={`💲 Budget: ${defaultBudget === undefined ? 'off' : `$${defaultBudget}`}`}
@@ -5629,6 +6150,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
             <Button key="act-wrap" label="⏸ Wrap up all" onPress={() => sendToMany($, STEER_PRESETS.find(p => p.key === 'wrap')!.text, { main: true, helpers: true })} />
             <Button key="act-stop" label="⏹ Stop helpers" onPress={() => sendToMany($, STOP_HELPERS_NOTE, { main: false, helpers: true })} />
             <Button key="act-verify" label="✅ Verify" onPress={() => sendToMany($, VERIFY_NOTE, { main: true, helpers: false })} />
+            <Button key="act-handoff" label="📝 Handoff" onPress={() => runCommand($, 'handoff')} />
             <Button key="act-report" label="📊 Report" onPress={async () => { await update($, view, () => 'report'); await Promise.resolve($.ui.toast('📊 Report: the last 7 days')).catch(() => undefined) }} />
           </Box>
         </Box>

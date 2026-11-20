@@ -56,6 +56,11 @@ Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C
 | `/muka nudges on` / `/muka nudges off` | Tell the agent about waste as it happens (on by default) |
 | `/muka models on` / `/muka models off` | Stop clear model waste for helpers (off by default) |
 | `/muka rea` / `/muka rea setup` / `/muka rea doctor` | REA, Reverse Engineer Anything: status, install or update, checks |
+| `/muka trim on` / `/muka trim off` / `/muka trim 12000` | Output trimming (off by default); the number sets the threshold in characters (1,000 to 200,000) |
+| `/muka context` | What filled Main's context: Muka's rules and notes, tool results by kind, the engine's total |
+| `/muka handoff` | Main writes `.claude/handoff.md` so a fresh chat can continue |
+| `/muka compact` | Hints Main to run `/compact` at its next step |
+| `/muka menu` | Opens the ☰ Menu tab: a button for every command |
 
 ## Smart rules
 
@@ -101,6 +106,26 @@ The prompt cache keeps what a chat has already read, so a turn pays for the new 
 - **The drop alert:** when a turn read at least 20,000 input tokens and its cache rate fell 30 points or more below the previous turn's, Alerts shows `cache dropped NN% → MM%: <cause>`: an idle gap longer than the TTL, the model changed, the context was compacted, a rule or setting toggled or plugins reloaded, else unknown. It is counted under the `context` rule.
 - **`/muka audit`:** every plugin you leave enabled adds tool definitions and skill names to the front of every chat. Muka counts per day (store keys `use:`, 14 days) how often each tool server (`mcp__<server>__`), plugin skill (`<plugin>:<skill>`) and agent type was used. `/muka audit` lists the enabled plugins with no recorded use, the most used ones, and how to turn one off (`claude plugin disable <name>`). It only reads your settings and never changes them. A plugin that only adds commands or hooks shows no use here.
 
+## Saving tokens
+
+- **Output trimming (`/muka trim on`, off by default):** a successful `Bash` or `PowerShell` result longer than the threshold (12,000 characters; `/muka trim <chars>`) reaches the model as its first ~3,000 characters, every line that looks like an error (`error`, `fail`, `exception`, `warn`, `traceback`, `fatal`, `denied`, `not found`; at most 60, each clipped, deduped), its last ~3,000 characters, and one line saying how much was cut and where the full text is. The full text is saved under `~/.claude/muka-outputs/output-01.txt` to `output-30.txt` (the oldest is overwritten; the engine gives plugins no way to delete a file). Muka answers from its `tool.call` hook with `{ result }` in the tool's own output shape (`stdout`, `stderr`, ...), which the engine checks against the tool's schema. `Read`, `Grep`, `Edit`, agents and MCP tools are never trimmed, nor failed or backgrounded commands. Each trim adds an Alerts line (`trimmed Bash output: ~Nk tokens saved`), counts toward the prompt's `trimSavedTokens` in the log, and shows in `/muka report` as `Saved by Muka`.
+- **Context breakdown (🧮 Context tab, `/muka context`):** a stacked bar and rows for what Muka can measure of Main's context this conversation: its rules and notes, and tool results by kind (Read, Bash/PowerShell, Grep/Glob, MCP, agents' reports, other), against the engine's own total. The rest is shown as `other (system prompt, tools, conversation)`: Muka does not see inside it. Counts are characters / 4, restart in a new chat, and reset when the context is compacted.
+- **Handoff (`/muka handoff`, 📝 Handoff on the Bridge and the Menu):** a note asks Main to write a handoff (goal, done, left, decisions, files, how to verify, 300 words) to `<project>/.claude/handoff.md` and to tell you to start a new chat and say "continue from .claude/handoff.md". Muka suggests it once, in Alerts and the pulse, when Main's chat passes 4 hours of turn time or 300 steps.
+- **Compact hint (`/muka compact`, 🗜 Compact hint in the Menu):** when a plan step finishes while the context is over 40%, Main is told that is a clean place to `/compact` (at most one hint every 20 minutes; off with nudges and the context rule off).
+- **Cache causes and the tool list:** the engine exposes no cache-miss cause to plugins (nothing like `last_miss_cause` is in its types), so the drop alert's cause stays Muka's best guess, and `/muka cache` shows the last drop and says so; if a turn ever carries `last_miss_cause`, Muka uses it. When a tool server joins or leaves between Main's turns (read from the engine's tool list), Alerts shows `tool list changed: <server> (this can reset the cache)` and that becomes the likeliest cause of the next drop.
+
+## The Menu
+
+The ☰ **Menu** tab (right after the Bridge, on every surface; `/muka menu` opens it) has a button for every command, in groups:
+
+- **Switches** (primary while on, the state in the label): Panel rules, Nudges, Model guard, Delete guard, Pings, Motion, Trim, and Budget cycle (off, $2, $5, $10).
+- **Views:** Rules, Context, Report, Alerts, Changes, Activity.
+- **Actions:** Wrap up all, Stop helpers, Verify, Handoff, Compact hint.
+- **Info:** Status, Cache, Audit, Recap today, Recap yesterday, Rules list. Their text prints in a result area under the buttons (with a Clear button).
+- **Tools:** REA status, REA setup, REA doctor, Setup, Setup undo. REA setup and Setup undo need a second press within 10 seconds (the label reads `Press again to confirm`).
+
+The Bridge's Controls also carry a ✂️ Trim toggle and its Actions a 📝 Handoff button.
+
 ## Smarter work
 
 Muka does more than show the agents: it keeps them efficient.
@@ -128,7 +153,7 @@ Everything it replaces is copied first to `~/.claude/backups/muka-setup-<time>/`
 
 ## The panel (desktop app)
 
-A row of icons opens each view: 🧭 Bridge, 📜 Activity, ⚠️ Alerts, 📝 Changes, 💲 Spend and 💡 Reflect. Every view is a picture first, drawn as a dark HUD: black-green glass with faint scanlines, a green hairline, monospace type and neon colours (the same in light and dark themes).
+A row of icons opens each view: 🧭 Bridge, ☰ Menu, 📜 Activity, ⚠️ Alerts, 📝 Changes, 💲 Spend, 🧮 Context, 💡 Reflect and 🧠 Rules. Every view is a picture first, drawn as a dark HUD: black-green glass with faint scanlines, a green hairline, monospace type and neon colours (the same in light and dark themes).
 
 - **🧭 Bridge**, one card:
   - The glowing MUKA with a blinking ● LIVE (or IDLE / STUCK) chip and the verified chip, the clock and spend on the right, a cyan prompt line (`> builder :: Edit mailer.ts_`), the plan bar (the current step pulsing violet) and `PLAN 2/4 · NOW: BUILD`.
@@ -164,7 +189,7 @@ Muka runs inside Claude Code as a plugin. Everything it does:
 
 - **Network:** none. Muka makes no network calls of its own.
 - **Programs it runs:** only `npx rea-agents …`, and only when you type `/muka rea setup` or `/muka rea doctor`.
-- **Files it writes:** only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify skill in `~/.claude/skills/verify`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
+- **Files it writes:** with `/muka trim on`, the full text of each trimmed output to `~/.claude/muka-outputs` (30 files, rotating). And only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify skill in `~/.claude/skills/verify`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
 - **Files it reads:** your settings during setup, `~/.claude.json` and `~/.claude/skills` for `/muka rea`, and the files the agents change (to show their diffs).
 - **Model calls:** one, the 💡 Reflect review, and only when you press it.
 - **What it changes in a conversation:** the rules block at the start of a chat (while smart is on), short notes added after tool results (waste nudges, budget warnings, your steering notes), a short brief added to the task of a helper that writes code, a helper's model when you turn the model guard on, and a refused shell command when you turn the delete guard on and answer Block.

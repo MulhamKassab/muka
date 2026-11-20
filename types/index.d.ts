@@ -80,6 +80,10 @@ export type MainInfo = {
   verify?: 'unverified' | 'verified'
   /** When the main agent's last request ended (a turn or a step): the prompt cache's clock starts there. */
   cacheEndAt?: number
+  /** The last cache drop: the hit rate before and after, its cause, and whether the engine named it or Muka guessed. */
+  cacheDrop?: { at: number; from: number; to: number; cause: string; source: 'engine' | 'guess' }
+  /** Set once Main's conversation is long (4 hours of turns or 300 steps): the pulse line suggests /muka handoff. */
+  handoffHint?: boolean
 }
 
 /** One item of the main agent's task list. */
@@ -134,6 +138,8 @@ export type LogEntry = {
   guarded?: number
   /** The size Claude gave the task ("Size: M"), if it gave one. */
   size?: 'S' | 'M' | 'L'
+  /** Tokens (characters / 4) that output trimming kept out of the context. */
+  trimSavedTokens?: number
 }
 
 export type NoticeKind =
@@ -188,7 +194,7 @@ export type SteerNote = {
   from?: 'muka'
 }
 
-export type SavvyView = 'flow' | 'steer' | 'activity' | 'cost' | 'radius' | 'notes' | 'reflect' | 'report' | 'rules'
+export type SavvyView = 'flow' | 'menu' | 'steer' | 'activity' | 'cost' | 'context' | 'radius' | 'notes' | 'reflect' | 'report' | 'rules'
 
 /** The stats recap of the main agent's last finished turn. */
 export type Recap = {
@@ -236,6 +242,10 @@ declare module 'claude-code' {
       steer: Shaped<SteerNote[]>
       /** Who the next steer note goes to: 'main' or a subagent's id. */
       steerTo: Shaped<string>
+      /** The Menu's result area: the text an info button printed, as Markdown; '' for none. */
+      menuResult: Shaped<string>
+      /** The Menu button waiting for its second press (Setup undo, REA setup), and when it was first pressed. */
+      menuConfirm: Shaped<{ key: string; at: number }>
     }
   }
 }
