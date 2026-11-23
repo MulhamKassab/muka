@@ -4,10 +4,10 @@ The person pasted the short prompt from the README. Do these steps in order and 
 
 `<home>` below is the person's home folder as a full path (for example `C:/Users/name` or `/Users/name`).
 
-1. **GitHub access.** Run `gh auth status`. If the GitHub CLI is missing or not signed in, stop and tell the person to install it from https://cli.github.com, run `gh auth login`, then ask again.
+1. **Git.** Run `git --version`. If git is missing, stop and tell the person to install it from https://git-scm.com, then ask again. The repository is public, so no GitHub sign-in is needed.
 2. **Pull the code.**
    - If `<home>/muka` exists: `git -C <home>/muka pull`.
-   - Otherwise: `gh repo clone MulhamKassab/muka <home>/muka`.
+   - Otherwise: `git clone https://github.com/MulhamKassab/muka <home>/muka`.
 3. **Install or update the plugin.** Run `claude plugin marketplace list`.
    - If a marketplace named `muka` is listed (an update): `claude plugin marketplace update muka`, then `claude plugin update muka@muka`.
    - Otherwise (a first install): `claude plugin marketplace add <home>/muka`, then `claude plugin install muka@muka`.

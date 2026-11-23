@@ -1,27 +1,35 @@
 # Muka
 
-Muka helps Claude Code work as a well-run team, and shows you what that team is doing and spending:
+**A Claude Code mod.** Muka is a plugin for [Claude Code](https://docs.claude.com/en/docs/claude-code) that helps it work as a well-run team, and shows you what that team is doing and spending. The repository is public and open source under the [MIT licence](LICENSE).
 
-- **The panel:** see your agents at a glance and steer them without interrupting.
-- **Smart rules:** coordination rules you switch on and off (task sizes, plan then swarm, helper models, stop rules, question rules).
-- **Setup:** one command installs the helper agents, the status line and the settings.
+## What it is
+
+- **The agents panel:** a panel beside the chat in the Claude desktop app shows the main agent and every helper it starts (what each is doing, its model, spend and context) and lets you steer them without interrupting. In the terminal and editors the same views are text. See [The panel](#the-panel-desktop-app).
+- **Smart rules:** coordination rules added to every chat while `/muka smart` is on: task sizes, plan then swarm, which helper model to use, stop rules and question rules. `/muka smart off` turns them all off; `/muka rule <id> off` turns off one. See [Smart rules](#smart-rules).
+- **Setup:** `/muka setup` installs the helper agents, the `verify` skill, the status line and the settings in one go, backing up anything it replaces; `/muka setup undo` puts the backups back. See [Setup](#setup).
+
+Muka makes no network calls of its own and only watches your agents unless you switch on one of its guards (details in [What Muka does on your computer](#what-muka-does-on-your-computer)).
 
 It was first called Savvy, then Helm, then Orbit; those old command names are gone, so use `/muka`.
 
-## Install with one prompt
+## Install
 
-Paste this into Claude Code on any computer. It installs Muka the first time and updates it later:
+You need Claude Code and `git`. Muka installs as a Claude Code plugin from a local clone of this repository.
+
+### With one prompt
+
+Paste this into Claude Code. It installs Muka the first time and updates it later:
 
 ```text
-Pull my private GitHub repo MulhamKassab/muka into the muka folder in my home folder (gh repo clone, or git pull if it's already there), then install it by following its INSTALL.md.
+Clone the public GitHub repo https://github.com/MulhamKassab/muka into the muka folder in my home folder (or git pull if it's already there), then install it by following its INSTALL.md.
 ```
 
-Claude follows [INSTALL.md](INSTALL.md), then tells you to type `/reload-plugins`, `/muka setup` and `/muka`. The computer needs the GitHub CLI signed in (`gh auth login`).
+Claude follows [INSTALL.md](INSTALL.md), then tells you to type `/reload-plugins`, `/muka setup` and `/muka`.
 
-## Install by hand
+### By hand
 
 ```bash
-gh repo clone MulhamKassab/muka ~/muka
+git clone https://github.com/MulhamKassab/muka ~/muka
 ```
 
 ```bash
@@ -32,7 +40,11 @@ claude plugin marketplace add ~/muka
 claude plugin install muka@muka
 ```
 
-Then type `/reload-plugins`, `/muka setup` and `/muka`. To update later: `git -C ~/muka pull`, `claude plugin marketplace update muka`, `claude plugin update muka@muka`.
+Then, in Claude Code, type `/reload-plugins`, `/muka setup` and `/muka`.
+
+To update later: `git -C ~/muka pull`, `claude plugin marketplace update muka`, `claude plugin update muka@muka`.
+
+To remove what setup installed, type `/muka setup undo`; `/muka all off` switches off the panel and the rules without uninstalling.
 
 ## Commands
 
