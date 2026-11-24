@@ -56,14 +56,29 @@ test('the registry: nine rules, assembled into the full rules, the core and the 
   expect(MUKA_CORE.length).toBeLessThanOrEqual(OLD_CORE_LENGTH)
 })
 
+test('the core is at least 35% shorter than before the helper rules moved into the muka-helpers skill, and keeps the hard numbers', () => {
+  // The core was 5160 characters; 35% shorter is 3354.
+  expect(MUKA_CORE.length).toBeLessThanOrEqual(3354)
+  for (const part of [
+    'S 0 helpers, M at most 3, L at most 6, in waves of at most 3',
+    'MUST name `model` and `effort` on every Agent call',
+    'at most 2, and at most two levels below the master',
+    'at most 3 per wave, 6 in all',
+    'Load the muka-helpers skill before starting a helper.',
+    'the `verify` skill',
+  ]) expect(MUKA_CORE).toContain(part)
+  // Each of the three helper rules points at the skill.
+  expect(MUKA_CORE.split('Load the muka-helpers skill').length - 1).toBe(3)
+})
+
 test('the new rule texts say what the rule controller asks', () => {
   const text = (id: string) => RULES.find(r => r.id === id)!.text
   expect(text('models')).toMatch(/MUST name `model` and `effort` on every Agent call/)
-  expect(text('models')).toMatch(/default is only a fallback/)
-  expect(text('models')).toMatch(/step up one level only after a real shortfall; any other model only when the user asks for it/)
-  expect(text('models')).toMatch(/`opus`, `high`: the final review of an L task, a bug that survived two fix attempts/)
-  expect(text('models')).toMatch(/`sonnet`, `medium`: building, tests, docs/)
-  expect(text('models')).toMatch(/`haiku`, `low`: reading and lookups/)
+  expect(text('models')).toMatch(/default is a fallback/)
+  expect(text('models')).toMatch(/Step up a level only after a real shortfall/)
+  expect(text('models')).toContain('`opus`/`high` only for an L review or a bug that survived two fixes')
+  expect(text('models')).toContain('`sonnet`/`medium` building')
+  expect(text('models')).toContain('`haiku`/`low` reading')
   expect(text('context')).toMatch(/50% full, finish the piece in hand and run \/compact \(say so to the user\)/)
   expect(text('context')).toMatch(/fresh chat \(\/clear\)/)
   expect(text('recover')).toMatch(/two failed fixes of the same problem, stop patching: go back to the last good state \(git restore \/ rewind\)/)

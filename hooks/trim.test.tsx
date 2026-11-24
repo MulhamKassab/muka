@@ -336,7 +336,10 @@ test('/muka context: tool results by kind, rules and notes, the engine total; re
   expect(text).toContain('- MCP tools: ~500')
   expect(text).toContain("- Agents' reports: ~250")
   expect(text).toContain('- Other tools: ~100')
-  expect(text).toContain(`- Rules + Muka notes: ~${kTokens(Math.round(coreText().length / 4))}`)
+  // The rules block plus the notes sent so far (the size note): a short core now shows its exact count, so allow for the notes.
+  const shown = Number(/- Rules \+ Muka notes: ~(\d+)\n/.exec(text ?? '')?.[1] ?? 'NaN')
+  expect(shown).toBeGreaterThanOrEqual(Math.round(coreText().length / 4))
+  expect(shown).toBeLessThan(Math.round(coreText().length / 4) + 150)
   expect(text).toMatch(/- other \(system prompt, tools, conversation\): ~\d+k/)
   // The view: a card on the desktop, text rows elsewhere.
   const desk = await mount($, 'desktop')

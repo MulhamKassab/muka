@@ -84,16 +84,7 @@ export const RULES: Rule[] = [
     text: [
       '## Helpers: which, when, how many',
       '',
-      'Helpers cost about 4x the tokens of doing the work yourself, so start one only where this list says.',
-      '',
-      '- **None:** a change in up to 3 files with the location known; one question over fewer than 10 files; dependent steps; edits to the same file; anything that needs back-and-forth.',
-      '- **`Explore` (haiku, low):** 10+ files to explore, or 2-3 independent questions: one per question, at most 3 at once. Web or docs research: 1-2 (sonnet if it must weigh sources).',
-      '- **`builder` (sonnet, medium):** 2+ independent pieces in different files, each about 10+ tool calls: one per piece, 2 usual, at most 3 per wave. One `builder` (sonnet, low) as a runner for a noisy run (full test suite, long logs) that returns a summary.',
-      '- **One fresh `builder` (opus, high)** with a full brief for a bug that survived two fix attempts.',
-      '- **`reviewer` (opus, high):** once, at the end of an L task. **`checker`:** only when the user asks, or in careful mode.',
-      '- **Totals per prompt:** S 0, M at most 3, L at most 6 in waves of at most 3.',
-      '- **Brief:** the objective, the exact files, what is already known, done-when, the output format. **Report back:** at most 150 words. Reuse a helper that already has the context (SendMessage) before starting a new one; never poll a helper.',
-      '- **Advisor:** main session only, before a risky approach or when the same error comes twice. **Stop rules:** same error twice: change the approach; a helper 5+ minutes on one step: steer or replace it; user budget: 70% wrap up, 100% no new helpers. **Muka notes** (after a tool result): follow them, no reply.',
+      'Helpers cost about 4x the tokens of doing the work yourself: S 0 helpers, M at most 3, L at most 6, in waves of at most 3. Always name `model` and `effort` on every Agent call. Load the muka-helpers skill before starting a helper.',
     ].join('\n'),
   },
   {
@@ -104,11 +95,7 @@ export const RULES: Rule[] = [
     text: [
       '## Models',
       '',
-      "You MUST name `model` and `effort` on every Agent call; the agent definition's default is only a fallback. This rule is the user's explicit instruction to set them. Use the default for each case in \"Helpers\"; step up one level only after a real shortfall; any other model only when the user asks for it.",
-      '',
-      '- `haiku`, `low`: reading and lookups;',
-      '- `sonnet`, `medium`: building, tests, docs;',
-      '- `opus`, `high`: the final review of an L task, a bug that survived two fix attempts.',
+      "You MUST name `model` and `effort` on every Agent call (the user's explicit instruction; the agent default is a fallback): `haiku`/`low` reading, `sonnet`/`medium` building, `opus`/`high` only for an L review or a bug that survived two fixes. Step up a level only after a real shortfall. Load the muka-helpers skill first.",
     ].join('\n'),
   },
   {
@@ -118,10 +105,7 @@ export const RULES: Rule[] = [
     text: [
       '## Sub-masters',
       '',
-      'A helper starts its own helpers only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless the user lifts the limit; otherwise it does the piece itself.',
-      '',
-      '- It plans in a few lines, fits and tests their work, and reports up in at most 150 words.',
-      '- Helpers never ask the user; they report the question up.',
+      'A helper starts its own helpers only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless the user lifts the limit; else it does the piece itself. Helpers never ask the user and report in at most 150 words. Load the muka-helpers skill first.',
     ].join('\n'),
   },
   {
@@ -132,7 +116,7 @@ export const RULES: Rule[] = [
     text: [
       '## Verify before done',
       '',
-      'Never call work done on reading alone; prove it ran (the `verify` skill does this). While working, run the targeted tests; once at the end, the full suite, the build and the linter, and for anything a person sees, the app itself (open it, click through). Never edit a test or its data to make it pass; fix or remove a flaky test, never retry it until green. A `reviewer` only on L tasks; fix its **Important** findings. Say how you verified it: what ran, and what was not checked.',
+      'Never call work done on reading alone; prove it with the `verify` skill: targeted tests while working, then the full suite, build, linter and the app. Never edit a test to make it pass. Say what ran and what was not checked.',
     ].join('\n'),
   },
   {
@@ -4564,7 +4548,7 @@ const reaStatus = async ($: EngineInterface): Promise<string> => {
 
 const SETUP_LAST = 'muka-setup-last.json'
 /** The skills /muka setup installs, each from extras/skills/<name>/SKILL.md to ~/.claude/skills/<name>/SKILL.md. */
-const SETUP_SKILLS = ['verify']
+const SETUP_SKILLS = ['verify', 'muka-helpers']
 
 /**
  * Muka's settings over yours: \`env\` merged key by key, every other key Muka
@@ -4644,7 +4628,7 @@ const runSetup = async ($: EngineInterface): Promise<{ text: string }> => {
   for (const f of (await $.fs.list(agentsDir)).filter(x => x.kind === 'file' && x.name.endsWith('.md'))) {
     await copy(`${agentsDir}/${f.name}`, `${claude}/agents/${f.name}`, `agent: ${f.name.replace(/\.md$/, '')}`)
   }
-  // The skills Muka ships (verify: prove a change ran before calling it done).
+  // The skills Muka ships (verify: prove a change ran before calling it done; muka-helpers: the full helper rules).
   for (const name of SETUP_SKILLS) {
     await copy(`${root}/extras/skills/${name}/SKILL.md`, `${claude}/skills/${name}/SKILL.md`, `skill: ${name}`)
   }

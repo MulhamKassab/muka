@@ -6,7 +6,7 @@
 
 - **The agents panel:** a panel beside the chat in the Claude desktop app shows the main agent and every helper it starts (what each is doing, its model, spend and context) and lets you steer them without interrupting. In the terminal and editors the same views are text. See [The panel](#the-panel-desktop-app).
 - **Smart rules:** coordination rules added to every chat while `/muka smart` is on: task sizes, plan then swarm, which helper model to use, stop rules and question rules. `/muka smart off` turns them all off; `/muka rule <id> off` turns off one. See [Smart rules](#smart-rules).
-- **Setup:** `/muka setup` installs the helper agents, the `verify` skill, the status line and the settings in one go, backing up anything it replaces; `/muka setup undo` puts the backups back. See [Setup](#setup).
+- **Setup:** `/muka setup` installs the helper agents, the `verify` and `muka-helpers` skills, the status line and the settings in one go, backing up anything it replaces; `/muka setup undo` puts the backups back. See [Setup](#setup).
 
 Muka makes no network calls of its own and only watches your agents unless you switch on one of its guards (details in [What Muka does on your computer](#what-muka-does-on-your-computer)).
 
@@ -56,7 +56,7 @@ To remove what setup installed, type `/muka setup undo`; `/muka all off` switche
 | `/muka rules` | Each rule, on or off, and how often its check fired this session |
 | `/muka rule <id> on` / `/muka rule <id> off` | Switch one rule (`/muka rule all off` for every one) |
 | `/muka all on` / `/muka all off` | Panel and rules together |
-| `/muka setup` / `/muka setup undo` | Install, or put back, the agents, the verify skill, status line and settings |
+| `/muka setup` / `/muka setup undo` | Install, or put back, the agents, the verify and muka-helpers skills, status line and settings |
 | `/muka budget 5` / `/muka budget off` | A spending cap per prompt (none by default) |
 | `/muka guard on` / `/muka guard off` | Ask before shell commands delete files (off by default) |
 | `/muka ping on` / `/muka ping off` | Sound, notification and phone push (on by default) |
@@ -78,7 +78,7 @@ To remove what setup installed, type `/muka setup undo`; `/muka all off` switche
 
 ## Smart rules
 
-While smart is on, Muka adds the coordination rules to every new chat, the same way CLAUDE.md is read. Switching it on or off also sends the current chat a note, so the change applies from your next message. The rules:
+While smart is on, Muka adds the coordination rules to every new chat, the same way CLAUDE.md is read. Switching it on or off also sends the current chat a note, so the change applies from your next message. The rules (the helper, model and sub-master rules ride in the chat as a short paragraph each, with the full text in the `muka-helpers` skill that Claude loads before starting a helper; the verify rule is two lines pointing at the `verify` skill; both skills are installed by `/muka setup`):
 
 - **Size every task first:** S (do it yourself, no helpers), M (at most 3 helpers, see the table below; you build), L (the team: at most 6 helpers, in waves of 3), careful mode (as L, plus your approval, tests first and the `checker`).
 - **Plan then swarm** for large tasks: scout, a PLAN.md with pieces and interfaces, one `builder` per independent piece (at most 3 per wave, 6 in all), fit, one `reviewer` (Opus, high).
@@ -183,6 +183,7 @@ Muka does more than show the agents: it keeps them efficient.
 `/muka setup` installs:
 
 - **Agents** in `~/.claude/agents`: `Explore` (Haiku, read-only), `builder` (Sonnet), `reviewer` (Sonnet, read-only), `checker` (Opus, read-only, only on request).
+- **The `muka-helpers` skill** in `~/.claude/skills/muka-helpers/SKILL.md`: the full text of the Helpers, Models and Sub-masters rules (which helper for what, how many, model and effort per case, the brief and the 150-word report, sub-master limits, advisor, stop rules, Muka notes). Claude loads it before starting any helper; the chat itself carries only the hard numbers (S 0 / M 3 / L 6, 3 per wave) and a pointer to it, which keeps the rules every chat starts with about 35% shorter.
 - **The `verify` skill** in `~/.claude/skills/verify/SKILL.md`: used before calling work done or committing. It finds the project's test, build, lint and run commands (package.json, Makefile, pyproject and the like, and the CI workflows), runs them, starts a web or desktop app and walks the changed path with the browser or computer tools (with a screenshot), never edits a test to pass, and ends with what ran and what was not checked.
 - **Status line** `~/.claude/statusline.js`: model, context, cost and usage limits.
 - **Settings** merged into `~/.claude/settings.json`: Sonnet as the main model, a 60-second question timeout, the advisor model, push notifications, and `"autoCompactWindow": 200000` (the conversation compacts at 200,000 tokens instead of filling a larger window; Claude Code's `autoCompactWindow` setting, 100,000 or more, capped at the model's window). `autoCompactWindow` is added only when your settings have none: yours is never replaced, and setup's result says which. Your other settings are kept; `env`, plugins and marketplaces are merged key by key, and a plugin you turned off stays off.
@@ -231,7 +232,7 @@ Muka runs inside Claude Code as a plugin. Everything it does:
 
 - **Network:** none. Muka makes no network calls of its own.
 - **Programs it runs:** only `npx rea-agents …`, and only when you type `/muka rea setup` or `/muka rea doctor`.
-- **Files it writes:** when output trimming applies (auto or on), the full text of each trimmed output to `~/.claude/muka-outputs` (30 files, rotating). And only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify skill in `~/.claude/skills/verify`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
+- **Files it writes:** when output trimming applies (auto or on), the full text of each trimmed output to `~/.claude/muka-outputs` (30 files, rotating). And only during `/muka setup` and `/muka setup undo`: the helper agents in `~/.claude/agents`, the verify and muka-helpers skills in `~/.claude/skills/verify` and `~/.claude/skills/muka-helpers`, `~/.claude/statusline.js`, `~/.claude/settings.json`, and backups of whatever they replace in `~/.claude/backups`. Its own state (panel views, the prompt log for `/muka recap` and `/muka report`, kept 14 days) lives in Claude Code's plugin store.
 - **Files it reads:** your settings during setup, `~/.claude.json` and `~/.claude/skills` for `/muka rea`, and the files the agents change (to show their diffs).
 - **Model calls:** one, the 💡 Reflect review, and only when you press it.
 - **What it changes in a conversation:** the rules block at the start of a chat (while smart is on), short notes added after tool results (waste nudges, budget warnings, your steering notes), a short brief added to the task of a helper that writes code, a helper's model when you turn the model guard on, and a refused shell command when you turn the delete guard on and answer Block.

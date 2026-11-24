@@ -142,27 +142,23 @@ test('the tuned rule texts: the helper table with its exact counts, the brief un
   const helpers = text('helpers')
   expect(helpers.startsWith('## Helpers: which, when, how many')).toBe(true)
   expect(RULES.find(r => r.id === 'helpers')!.title).toBe('Helpers: which, when, how many')
+  // The core keeps the hard numbers and points at the skill; the full table lives in the muka-helpers skill.
   for (const line of [
-    'Helpers cost about 4x the tokens of doing the work yourself, so start one only where this list says.',
-    '- **None:** a change in up to 3 files with the location known; one question over fewer than 10 files; dependent steps; edits to the same file; anything that needs back-and-forth.',
-    '- **`Explore` (haiku, low):** 10+ files to explore, or 2-3 independent questions: one per question, at most 3 at once. Web or docs research: 1-2 (sonnet if it must weigh sources).',
-    '- **`builder` (sonnet, medium):** 2+ independent pieces in different files, each about 10+ tool calls: one per piece, 2 usual, at most 3 per wave. One `builder` (sonnet, low) as a runner for a noisy run (full test suite, long logs) that returns a summary.',
-    '- **One fresh `builder` (opus, high)** with a full brief for a bug that survived two fix attempts.',
-    '- **`reviewer` (opus, high):** once, at the end of an L task. **`checker`:** only when the user asks, or in careful mode.',
-    '- **Totals per prompt:** S 0, M at most 3, L at most 6 in waves of at most 3.',
-    '- **Brief:** the objective, the exact files, what is already known, done-when, the output format. **Report back:** at most 150 words. Reuse a helper that already has the context (SendMessage) before starting a new one; never poll a helper.',
-    '- **Advisor:** main session only',
-    '**Stop rules:**',
-    '**Muka notes**',
+    'Helpers cost about 4x the tokens of doing the work yourself',
+    'S 0 helpers, M at most 3, L at most 6, in waves of at most 3',
+    'Always name `model` and `effort` on every Agent call',
+        'Load the muka-helpers skill before starting a helper.',
   ]) expect(helpers).toContain(line)
   expect(text('models')).toContain('You MUST name `model` and `effort` on every Agent call')
-  expect(text('models')).toContain('step up one level only after a real shortfall; any other model only when the user asks for it')
-  expect(text('submasters')).toContain('only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless the user lifts the limit; otherwise it does the piece itself')
+  expect(text('models')).toContain('Step up a level only after a real shortfall')
+  expect(text('models')).toContain('Load the muka-helpers skill first.')
+  expect(text('submasters')).toContain('only for an L piece whose parts have their own files: at most 2, and at most two levels below the master unless the user lifts the limit; else it does the piece itself')
   expect(text('submasters')).toContain('150 words')
+  expect(text('submasters')).toContain('Load the muka-helpers skill first.')
   expect(text('large')).toContain('at most 3 per wave and 6 in all')
   expect(text('large')).toContain('`reviewer` (opus, high) once')
-  expect(text('verify')).toContain('While working, run the targeted tests; once at the end, the full suite')
-  expect(text('verify')).toContain('A `reviewer` only on L tasks')
+  expect(text('verify')).toContain('the `verify` skill')
+  expect(text('verify')).toContain('targeted tests while working, then the full suite, build, linter and the app')
   expect(RULES.find(r => r.id === 'helpers')!.when).toBe('always')
   const brief = helperBrief(2)
   expect(brief.length).toBeLessThan(900)
