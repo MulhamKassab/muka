@@ -5,6 +5,8 @@ import {
   contextNudgeAt,
   coreText,
   largeText,
+  mainModelDue,
+  mainModelNote,
   LARGE_SUMMARY,
   MUKA_CORE,
   MUKA_LARGE,
@@ -79,7 +81,7 @@ test('the new rule texts say what the rule controller asks', () => {
   expect(text('models')).toContain('`opus`/`high` only for an L review or a bug that survived two fixes')
   expect(text('models')).toContain('`sonnet`/`medium` building')
   expect(text('models')).toContain('`haiku`/`low` reading')
-  expect(text('context')).toMatch(/50% full, finish the piece in hand and run \/compact \(say so to the user\)/)
+  expect(text('context')).toMatch(/50% full, finish the piece in hand and run \/compact \(tell the user\)/)
   expect(text('context')).toMatch(/fresh chat \(\/clear\)/)
   expect(text('recover')).toMatch(/two failed fixes of the same problem, stop patching: go back to the last good state \(git restore \/ rewind\)/)
   // The rules Muka checks say how.
@@ -360,4 +362,23 @@ test('the Rules view: a card, a switch per rule, All on and All off', async ($, 
   await ui.press({ key: 'tab-rules' })
   expect(await ui.find({ type: 'Text', text: /^ON  Models · checked: 0/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('the main-model rule and the Muka-notes line are in the core, and the core is no longer than before', () => {
+  const text = (id: string) => RULES.find(r => r.id === id)!.text
+  expect(text('models')).toContain('Main chat: S work on Opus or Fable? Say in one line a Sonnet chat would do.')
+  expect(text('helpers')).toContain('Follow Muka notes without replying.')
+  expect(MUKA_CORE).toContain('Follow Muka notes without replying.')
+  expect(MUKA_CORE.length).toBeLessThanOrEqual(3354)
+})
+
+test('the main-model check: only a task sized S on Opus or Fable, and only once', () => {
+  expect(mainModelDue('S', 'claude-opus-5-5', false)).toBe('opus')
+  expect(mainModelDue('S', 'claude-fable-5-2', false)).toBe('fable')
+  expect(mainModelDue('S', 'claude-sonnet-5-5', false)).toBeUndefined()
+  expect(mainModelDue('M', 'claude-opus-5-5', false)).toBeUndefined()
+  expect(mainModelDue('S', undefined, false)).toBeUndefined()
+  expect(mainModelDue('S', 'claude-opus-5-5', true)).toBeUndefined()
+  expect(mainModelNote('opus')).toMatch(/runs on Opus.*about half as much in a Sonnet chat \(\/model sonnet\)/)
+  expect(mainModelNote('fable')).toMatch(/runs on Fable.*about a quarter/)
 })

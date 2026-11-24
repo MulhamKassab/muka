@@ -170,7 +170,7 @@ test('the tuned rule texts: the helper table with its exact counts, the brief un
 
 test('the notes quote their rules', () => {
   expect(reuseNote('Explore')).toBe('Muka: a finished Explore helper already has context on this; continue it with SendMessage instead of starting a new one, unless the work is unrelated.')
-  expect(sizeHelperNote('S')).toMatch(/S: a few files and a clear change\. Do it yourself and run the tests yourself\. No helpers\./)
+  expect(sizeHelperNote('S')).toMatch(/S: a few files and a clear change\. Do it and test it yourself\. No helpers\./)
   expect(sizeHelperNote('M')).toMatch(/At most 3 helpers \(see "Helpers"\); you build\..*fourth helper/)
   expect(exploreModelNote('opus')).toMatch(/reading runs on haiku/)
 })

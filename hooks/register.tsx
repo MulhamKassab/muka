@@ -34,7 +34,7 @@ export type Rule = { id: string; title: string; text: string; when: 'always' | '
 
 /** The line every set of rules starts with. */
 export const RULES_INTRO =
-  "These are the user's coordination rules, added by Muka (their Claude Code panel). Follow them as you would the user's own CLAUDE.md. The user can switch them off with /muka smart off, or one at a time with /muka rule <id> off.\n\nAim for the best result at the lowest cost: give each piece of work the cheapest model and effort that can do it well, spend expensive thinking once, and keep everything that flows back up short."
+  "These are the user's coordination rules, added by Muka (their Claude Code panel); follow them as you would their CLAUDE.md. /muka smart off turns them off, /muka rule <id> off one rule.\n\nAim for the best result at the lowest cost: give each piece the cheapest model and effort that does it well, spend expensive thinking once, and keep what flows back up short."
 
 /** The coordination rules, in the order they are sent. */
 export const RULES: Rule[] = [
@@ -48,9 +48,9 @@ export const RULES: Rule[] = [
       '',
       'Before starting, decide the size and say it in one line (for example "Size: M").',
       '',
-      '- **S**: a few files and a clear change. Do it yourself and run the tests yourself. No helpers.',
+      '- **S**: a few files and a clear change. Do it and test it yourself. No helpers.',
       '- **M**: needs research or reading many files. At most 3 helpers (see "Helpers"); you build.',
-      '- **L**: clearly more than about 20 tool calls, and it splits into independent pieces (different files or areas). The team, "Large tasks" below: at most 6 helpers, in waves of 3.',
+      '- **L**: clearly over ~20 tool calls, splitting into independent pieces (different files or areas). The team, "Large tasks" below: at most 6 helpers, in waves of 3.',
       '- **Careful mode**: only when the user says so, or for production data, payments, or deleting data. As L, plus: the user approves PLAN.md before building, tests come first, the `checker` runs at the end.',
     ].join('\n'),
   },
@@ -84,18 +84,18 @@ export const RULES: Rule[] = [
     text: [
       '## Helpers: which, when, how many',
       '',
-      'Helpers cost about 4x the tokens of doing the work yourself: S 0 helpers, M at most 3, L at most 6, in waves of at most 3. Always name `model` and `effort` on every Agent call. Load the muka-helpers skill before starting a helper.',
+      'Helpers cost about 4x the tokens of doing the work yourself: S 0 helpers, M at most 3, L at most 6, in waves of at most 3. Always name `model` and `effort` on every Agent call. Load the muka-helpers skill before starting a helper. Follow Muka notes without replying.',
     ].join('\n'),
   },
   {
     id: 'models',
     title: 'Models',
     when: 'always',
-    check: 'A helper started without a model is marked DEFAULT in the agents console, and its starter is told to name one; an Explore started on Opus or Fable brings a note that reading runs on Haiku.',
+    check: 'A helper started without a model is marked DEFAULT in the agents console, and its starter is told to name one; an Explore started on Opus or Fable brings a note that reading runs on Haiku; a task sized S on an Opus or Fable main chat brings one note per session to point the user at a Sonnet chat.',
     text: [
       '## Models',
       '',
-      "You MUST name `model` and `effort` on every Agent call (the user's explicit instruction; the agent default is a fallback): `haiku`/`low` reading, `sonnet`/`medium` building, `opus`/`high` only for an L review or a bug that survived two fixes. Step up a level only after a real shortfall. Load the muka-helpers skill first.",
+      "You MUST name `model` and `effort` on every Agent call (the user's explicit instruction; the agent default is a fallback): `haiku`/`low` reading, `sonnet`/`medium` building, `opus`/`high` only for an L review or a bug that survived two fixes. Step up a level only after a real shortfall. Main chat: S work on Opus or Fable? Say in one line a Sonnet chat would do. Load the muka-helpers skill first.",
     ].join('\n'),
   },
   {
@@ -127,7 +127,7 @@ export const RULES: Rule[] = [
     text: [
       '## Context',
       '',
-      'Keep the context lean: at about 50% full, finish the piece in hand and run /compact (say so to the user); start an unrelated task in a fresh chat (/clear); send big reading to a helper so only its conclusion comes back.',
+      'Keep the context lean: at about 50% full, finish the piece in hand and run /compact (tell the user); start an unrelated task in a fresh chat (/clear); send big reading to a helper so only its conclusion comes back.',
     ].join('\n'),
   },
   {
@@ -148,7 +148,7 @@ export const RULES: Rule[] = [
     text: [
       '## Questions',
       '',
-      "When you ask the user a question, always mark one option \"(Recommended)\" and put it first. If it closes unanswered (the user is away), go ahead with that option, say so in one line, and keep working. Never for anything that deletes data, spends money, or sends or publishes something for the user: then stop and wait.",
+      "When you ask the user a question, mark one option \"(Recommended)\" and put it first. If it closes unanswered (the user is away), go ahead with it, say so in one line, and keep working. Never for anything that deletes data, spends money, or sends or publishes something for the user: then stop and wait.",
     ].join('\n'),
   },
 ]
@@ -4086,6 +4086,8 @@ let sizingSent = false
 const reuseNoted = new Set<string>()
 let mainHelpers = 0
 let sizeRuleNoted = false
+/** Whether this session already got the main-model note (once per session, so it never nags). */
+let mainModelNoted = false
 
 /** The helpers rule's note: a finished helper of that type already holds the context. */
 export const reuseNote = (type: string): string =>
@@ -4095,10 +4097,24 @@ export const reuseNote = (type: string): string =>
 export const exploreModelNote = (model: string): string =>
   `Muka: Explore only reads, and reading runs on haiku (low effort), not ${model}. Start it on haiku next time.`
 
+/**
+ * The models rule's main-chat check: a task sized S while Main runs on Opus or
+ * Fable. Sonnet costs half of Opus and a quarter of Fable at API prices.
+ */
+export const mainModelNote = (f: 'opus' | 'fable'): string =>
+  `Muka: you sized this task S and this chat runs on ${f === 'fable' ? 'Fable' : 'Opus'}. Do it here, and tell the user in one line that routine S work costs about ${f === 'fable' ? 'a quarter' : 'half'} as much in a Sonnet chat (/model sonnet).`
+
+/** Whether a task sized S on an Opus or Fable main chat needs the main-model note: only once per session. */
+export const mainModelDue = (size: string | undefined, model: string | undefined, noted: boolean): 'opus' | 'fable' | undefined => {
+  if (noted || size !== 'S') return undefined
+  const f = family(model)
+  return f === 'opus' || f === 'fable' ? f : undefined
+}
+
 /** The size rule's note for a helper beyond what the size allows, quoting the rule. */
 export const sizeHelperNote = (size: 'S' | 'M'): string =>
   size === 'S'
-    ? 'Muka: you sized this task S, and the size rule says: "S: a few files and a clear change. Do it yourself and run the tests yourself. No helpers." Do it yourself, or say a new size.'
+    ? 'Muka: you sized this task S, and the size rule says: "S: a few files and a clear change. Do it and test it yourself. No helpers." Do it yourself, or say a new size.'
     : 'Muka: you sized this task M, and the size rule says: "M: needs research or reading many files. At most 3 helpers (see "Helpers"); you build." This is the fourth helper: do the rest yourself, or say a new size.'
 
 // ---------------------------------------------------------------------------
@@ -4955,6 +4971,7 @@ export const register: Register = on => {
     capNoted.clear()
     mainHelpers = 0
     sizeRuleNoted = false
+    mainModelNoted = false
     // The prompt cache: a session.start that finds a turn already behind it is a reload (or a toggle) that may have changed the prompt prefix.
     const storedTtl = await $.store.get('cacheTtlMin').catch(() => undefined)
     cacheTtlMin = typeof storedTtl === 'number' && storedTtl > 0 ? storedTtl : CACHE_TTL_DEFAULT
@@ -5386,6 +5403,15 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       if (e.agentId === undefined && promptStats.size === undefined && step.answer) {
         const size = sizeIn(step.answer)
         if (size) promptStats.size = size
+        // The models rule, main chat: S work on Opus or Fable is told once per session.
+        const raw = (e as { model?: unknown }).model
+        const model = typeof raw === 'string' && raw ? raw : (await read($, main)).model
+        const f = ruleOn('models') ? mainModelDue(size, model, mainModelNoted) : undefined
+        if (f) {
+          mainModelNoted = true
+          wasteState.pendingMain.push(mainModelNote(f))
+          await ruleHit($, 'models', 'Main', `task sized S on ${f}: a Sonnet chat would do it for less`)
+        }
       }
       // Main's request just ended: the prompt cache's clock starts over.
       if (e.agentId === undefined) await markCacheEnd($, await clockNow($))

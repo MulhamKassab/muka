@@ -8,6 +8,7 @@ import {
   isThinBrief,
   LONG_REPORT,
   LONG_REPORT_NOTE,
+  mainModelNote,
   nextDepth,
   nextTrimMode,
   THIN_BRIEF_NOTE,
@@ -432,4 +433,32 @@ test('a drop in the cache rate after an effort change is told as "effort changed
   await turn('low', HIGH)
   await turn('low', LOW)
   expect((await muka($, 'cache')).text).toContain('Cause: unknown')
+})
+
+test('main model: a task sized S on an Opus main chat brings one note per session; Sonnet and M bring none', async ($, on) => {
+  const { said } = engine(on)
+  await start($)
+  const step = async (model: string, size: string) => {
+    said.size = size
+    for await (const chunk of $.turn.step({ turnId: 's', index: 0, model, messageCount: 1 } as never)) void chunk
+  }
+  await $.turn.start({ turnId: 'a', text: 'rename a variable' } as never)
+  await step('claude-sonnet-5-5', 'S')
+  expect(await notes($)).toEqual([])
+  await $.turn.start({ turnId: 'b', text: 'a medium thing' } as never)
+  await step('claude-opus-5-5', 'M')
+  expect(await notes($)).toEqual([])
+  await $.turn.start({ turnId: 'c', text: 'fix a typo' } as never)
+  await step('claude-opus-5-5', 'S')
+  expect(await notes($)).toEqual([mainModelNote('opus')])
+  // Once per session.
+  await $.turn.start({ turnId: 'd', text: 'another typo' } as never)
+  await step('claude-opus-5-5', 'S')
+  expect(await notes($)).toEqual([])
+  // The models rule off: no note.
+  await start($)
+  await muka($, 'rule models off')
+  await $.turn.start({ turnId: 'e', text: 'one more typo' } as never)
+  await step('claude-opus-5-5', 'S')
+  expect(await notes($)).toEqual([])
 })
