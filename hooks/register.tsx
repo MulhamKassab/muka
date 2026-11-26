@@ -2995,6 +2995,154 @@ export const toolRows = (feed: ActivityItem[], max = 10): BarRow[] => {
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Muka Phone: the live status file (format v1) that the companion web app reads.
+
+export type LiveStep = { tool: string; label: string; at: number }
+export type LiveStatus = {
+  v: 1
+  sessionId: string
+  project: string
+  cwd: string
+  updatedAt: number
+  prompt?: string
+  isWorking: boolean
+  turnStartedAt?: number
+  turnEndedAt?: number
+  main: {
+    model?: string
+    ctxPercent?: number
+    costUsd?: number
+    promptCostUsd?: number
+    promptBudget?: number
+    stepCount?: number
+    current?: LiveStep
+    verify?: 'unverified' | 'verified'
+    plan?: { content: string; status: 'pending' | 'in_progress' | 'completed' }[]
+    limits?: { kind: string; percent: number; resetsAt?: string }[]
+  }
+  score: MukaScoreResult
+  helpers: {
+    id: string
+    type: string
+    description: string
+    model: string
+    effort?: string
+    status: SubAgentStatus
+    startedAt: number
+    endedAt?: number
+    stepCount: number
+    current?: LiveStep
+  }[]
+  activity: { at: number; agent: string; tool: string; label: string; outcome?: 'denied' | 'error' }[]
+  tools: { tool: string; count: number; errors: number }[]
+  changes: { path: string; count: number; agents: string[]; at: number }[]
+  alerts: { at: number; kind: string; agent: string; text: string }[]
+}
+
+const LIVE_LABEL = 160
+const LIVE_PROMPT = 200
+const LIVE_NOTICE = 300
+
+/** Masks what looks like a secret before text leaves for the phone: URL query strings, Bearer and key=value tokens, known token prefixes and long mixed letter-digit runs. */
+export const redactSecrets = (text: string): string =>
+  text
+    .replace(/(https?:\/\/[^\s?#"'`]+)\?[^\s"'`]*/gi, '$1?…')
+    .replace(/\bBearer\s+[^\s"'`]+/gi, 'Bearer …')
+    .replace(/\b(authorization|x-api-key|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|token|secret|client[_-]?secret|password|passwd|pwd|cookie)(["']?\s*[:=]\s*["']?|\s+)(?!…)[^\s"'`&,;]+/gi, '$1$2…')
+    .replace(/\b(sk-|sk_live_|ghp_|gho_|ghs_|ghu_|github_pat_|xox[abprs]-|AKIA|AIza)[A-Za-z0-9_-]{8,}/g, '…')
+    .replace(/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{32,}\b/g, '…')
+
+/** The status file's content for one session: clipped and capped (12 helpers, 30 steps, 10 tools, 20 files, 10 alerts), with no diffs and no file contents. */
+export const liveStatus = (input: {
+  sessionId: string
+  cwd?: string
+  info: MainInfo
+  list: SubAgent[]
+  feed: ActivityItem[]
+  files: FileChange[]
+  notes: Notice[]
+  now: number
+}): LiveStatus => {
+  const { info, list, feed, files, notes } = input
+  const cwd = (input.cwd ?? '').replace(/\\/g, '/').replace(/\/+$/, '')
+  const step = (s: Step | undefined): LiveStep | undefined => (s ? { tool: clip(s.tool, 80), label: clip(redactSecrets(s.label), LIVE_LABEL), at: s.at } : undefined)
+  const by = new Map<string, { count: number; errors: number }>()
+  for (const s of feed) {
+    const t = by.get(s.tool) ?? { count: 0, errors: 0 }
+    t.count++
+    if (s.outcome === 'error') t.errors++
+    by.set(s.tool, t)
+  }
+  const costKnown = info.costUsd !== undefined && info.promptCostStart !== undefined
+  const out: LiveStatus = {
+    v: 1,
+    sessionId: input.sessionId,
+    project: cwd.split('/').filter(Boolean).pop() ?? '',
+    cwd,
+    updatedAt: input.now,
+    isWorking: info.isWorking === true,
+    main: {},
+    score: mukaScore({ info, list, feed }),
+    helpers: list.slice(-12).map(a => ({
+      id: a.id,
+      type: clip(a.type, 60),
+      description: clip(redactSecrets(clean(a.description)), LIVE_LABEL),
+      model: a.model,
+      ...(a.effort !== undefined ? { effort: a.effort } : {}),
+      status: a.status,
+      startedAt: a.startedAt,
+      ...(a.endedAt !== undefined ? { endedAt: a.endedAt } : {}),
+      stepCount: a.stepCount,
+      ...(a.steps.length > 0 ? { current: step(a.steps[a.steps.length - 1]) } : {}),
+    })),
+    activity: feed.slice(-30).map(s => ({ at: s.at, agent: clip(s.agent, 60), tool: clip(s.tool, 80), label: clip(redactSecrets(s.label), LIVE_LABEL), ...(s.outcome ? { outcome: s.outcome } : {}) })),
+    tools: [...by.entries()]
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+      .slice(0, 10)
+      .map(([tool, t]) => ({ tool: clip(tool, 80), count: t.count, errors: t.errors })),
+    changes: files.slice(-20).map(f => ({ path: clip(f.path, 300), count: f.count, agents: f.agents.slice(0, 8).map(x => clip(x, 60)), at: f.at })),
+    alerts: notes.slice(-10).map(n => ({ at: n.at, kind: n.kind, agent: clip(n.agent, 60), text: clip(redactSecrets(clean(n.text)), LIVE_NOTICE) })),
+  }
+  if (info.prompt) out.prompt = clip(redactSecrets(clean(info.prompt)), LIVE_PROMPT)
+  if (info.turnStartedAt !== undefined) out.turnStartedAt = info.turnStartedAt
+  if (info.turnEndedAt !== undefined) out.turnEndedAt = info.turnEndedAt
+  const m = out.main
+  if (info.model !== undefined) m.model = info.model
+  if (info.ctxPercent !== undefined) m.ctxPercent = info.ctxPercent
+  if (info.costUsd !== undefined) m.costUsd = info.costUsd
+  if (costKnown) m.promptCostUsd = Math.max(0, (info.costUsd as number) - (info.promptCostStart as number))
+  if (info.promptBudget !== undefined) m.promptBudget = info.promptBudget
+  if (info.stepCount !== undefined) m.stepCount = info.stepCount
+  const cur = step(info.current)
+  if (cur) m.current = cur
+  if (info.verify) m.verify = info.verify
+  if (info.plan) m.plan = info.plan.slice(0, 40).map(p => ({ content: clip(p.content, LIVE_LABEL), status: p.status }))
+  if (info.limits) m.limits = info.limits.map(l => ({ kind: l.kind, percent: l.percent, ...(l.resetsAt !== undefined ? { resetsAt: l.resetsAt } : {}) }))
+  return out
+}
+
+let liveOn = true
+let liveLastAt = 0
+
+/** Writes the session's status file; throttled to one write per 2 s unless forced. Never throws. */
+const writeLive = async ($: EngineInterface, force: boolean): Promise<void> => {
+  try {
+    if (!liveOn) return
+    const t = Date.now()
+    if (!force && t - liveLastAt < 2000) return
+    liveLastAt = t
+    const home = await homeDir($)
+    if (!home) return
+    const [info, list, feed, files, notes] = await Promise.all([read($, main), read($, agents), read($, activity), read($, changes), read($, notices)])
+    const status = liveStatus({ sessionId, cwd: projectRoot, info, list, feed, files, notes, now: t })
+    const safe = sessionId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 128) || 'session'
+    await $.fs.write(`${home}/.claude/muka/live/${safe}.json`, JSON.stringify(status))
+  } catch {
+    // Best effort: a status file never breaks a hook.
+  }
+}
+
 /** The tool card: this prompt's steps only (the last 200 kept). */
 export const toolsCard = (feed: ActivityItem[]): Card => {
   const c = barsCard('Tools · this prompt', toolRows(feed), undefined, 'No steps yet this prompt.')
@@ -4621,6 +4769,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     '- Handoff: /muka handoff (Main writes .claude/handoff.md for a fresh chat); /muka compact (hint Main to /compact now)',
     '- Menu: /muka menu opens the ☰ tab, a button for every command',
     '- Phone: /muka phone (which screens are attached, and opens the pane for the phone)',
+    '- Phone app: /muka live on|off (status file for the Muka Phone web app)',
     '- Report: /muka report (the last 7 days: spend by model, helper and size, waste caught, suggestions)',
     '- REA (Reverse Engineer Anything): /muka rea (status), /muka rea setup (install or update), /muka rea doctor',
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
@@ -4932,6 +5081,19 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
         : 'Muka pings off.',
     }
   }
+  if (words[0] === 'live') {
+    if (words[1] !== undefined && words[1] !== 'on' && words[1] !== 'off') {
+      return { text: `Muka phone status file is ${liveOn ? 'on' : 'off'}. Use /muka live on or /muka live off.` }
+    }
+    liveOn = words[1] === 'on' ? true : words[1] === 'off' ? false : !liveOn
+    await $.store.set('live', liveOn)
+    if (liveOn) await writeLive($, true)
+    return {
+      text: liveOn
+        ? 'Muka live on: this session writes its status file for the Muka Phone web app (see companion/README.md).'
+        : 'Muka live off: no status file is written (an old one stays until you delete it).',
+    }
+  }
   if (words[0] === 'recap') {
     const isYesterday = words[1] === 'yesterday'
     const t = Date.now() - (isYesterday ? 24 * 3600 * 1000 : 0)
@@ -5136,6 +5298,7 @@ export const register: Register = on => {
     isSmart = (await $.store.get('smart')) !== false
     isGuardOn = (await $.store.get('guard')) === true
     pingsOn = (await $.store.get('pings')) !== false
+    liveOn = (await $.store.get('live').catch(() => undefined)) !== false
     motionOn = (await $.store.get('motion')) !== false
     nudgesOn = (await $.store.get('nudges')) !== false
     modelGuardOn = (await $.store.get('models')) === true
@@ -5388,6 +5551,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         }
         await update($, agents, list => [...list.filter(a => a.id !== agent.id), agent].slice(-50))
         await refreshStatus($)
+        void writeLive($, false).catch(() => undefined)
       }
     } catch {
       // Recording is best effort; the spawn's own result goes back untouched.
@@ -5598,6 +5762,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       if (now !== undefined) effortSeen.last = now
     }
     const step = yield* next(e)
+    void writeLive($, false).catch(() => undefined)
     try {
       if (e.agentId === undefined && promptStats.size === undefined && step.answer) {
         const size = sizeIn(step.answer)
@@ -5804,6 +5969,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       }
     }
     await refreshStatus($)
+    await writeLive($, true)
     return done
   })
 

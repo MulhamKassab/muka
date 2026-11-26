@@ -227,6 +227,10 @@ In the terminal and editors the same views are text.
 
 The line under the message box is Muka's **pulse**. It shows the most urgent thing when something needs you (a stuck agent, failures, the budget, a full context). Otherwise it shows who is working, the spend and the context while work runs, and a one-line recap of the last task when idle.
 
+### Phone app
+
+Muka also writes a read-only status file per session, `~/.claude/muka/live/<sessionId>.json` (format v1: the prompt, cost, plan, helpers, activity, tools, changes and alerts, clipped, with no diffs or file contents). The companion web app in `companion/` (see `companion/README.md`) reads it and serves a Home Screen page over Tailscale. `/muka live on|off` switches the file (on by default); off writes nothing.
+
 ## Delete guard
 
 Off by default. With `/muka guard on`, before a `Bash` or `PowerShell` command deletes files, Muka shows what it would remove and asks **Delete them** or **Block it**. Anything but Delete them blocks it, including a question that closes on its own. It reads common delete commands (`rm`, `del`, `Remove-Item`, `git clean -f`, `find -delete` and others), including ones wrapped in `sudo`, `bash -c`, `powershell -c` or `$(...)`. It also decodes `powershell -EncodedCommand` (and `-enc`, `-e`) and reads it the same way; one it cannot decode adds an Alerts line instead. Python and Node one-liners that delete (`python -c "shutil.rmtree(...)"`, `os.remove`, `Path(...).unlink()`, `node -e "fs.rmSync(...)"` and the like) are asked about too. It cannot see deletes inside scripts or programs it runs, and it is a safety net, not a sandbox.

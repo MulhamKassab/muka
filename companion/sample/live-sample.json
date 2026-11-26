@@ -1,0 +1,63 @@
+{
+  "v": 1,
+  "sessionId": "sample-session",
+  "project": "ticket-system",
+  "cwd": "C:/Users/m.kassab/For Me/ticket-system",
+  "updatedAt": 1795690000000,
+  "prompt": "Add email notifications to the ticket flow and cover them with tests",
+  "isWorking": true,
+  "turnStartedAt": 1795689400000,
+  "main": {
+    "model": "claude-opus-4-7",
+    "ctxPercent": 42,
+    "costUsd": 3.84,
+    "promptCostUsd": 1.27,
+    "promptBudget": 5,
+    "stepCount": 37,
+    "current": { "tool": "Bash", "label": "npm test -- notifications", "at": 1795689990000 },
+    "verify": "unverified",
+    "plan": [
+      { "content": "Read the ticket flow", "status": "completed" },
+      { "content": "Write notification module", "status": "completed" },
+      { "content": "Add tests", "status": "in_progress" },
+      { "content": "Run full suite and build", "status": "pending" }
+    ],
+    "limits": [{ "kind": "5h", "percent": 38, "resetsAt": "2026-11-26T18:00:00Z" }]
+  },
+  "score": {
+    "score": 78,
+    "grade": "B",
+    "pillars": [
+      { "key": "verify", "label": "Verified", "value": 60 },
+      { "key": "cost", "label": "Cost", "value": 85 },
+      { "key": "scope", "label": "Scope", "value": 92 },
+      { "key": "safety", "label": "Safety" }
+    ]
+  },
+  "helpers": [
+    { "id": "h1", "type": "Explore", "description": "Find where tickets change state", "model": "haiku", "effort": "low", "status": "done", "startedAt": 1795689450000, "endedAt": 1795689560000, "stepCount": 9 },
+    { "id": "h2", "type": "builder", "description": "Write the notification module", "model": "sonnet", "effort": "medium", "status": "running", "startedAt": 1795689600000, "stepCount": 14, "current": { "tool": "Edit", "label": "lib/notify.ts", "at": 1795689980000 } },
+    { "id": "h3", "type": "builder", "description": "Add email template tests", "model": "sonnet", "effort": "medium", "status": "failed", "startedAt": 1795689700000, "endedAt": 1795689800000, "stepCount": 4 }
+  ],
+  "activity": [
+    { "at": 1795689900000, "agent": "main", "tool": "Read", "label": "lib/tickets.ts" },
+    { "at": 1795689940000, "agent": "h2", "tool": "Edit", "label": "lib/notify.ts" },
+    { "at": 1795689960000, "agent": "h2", "tool": "Bash", "label": "rm -rf node_modules", "outcome": "denied" },
+    { "at": 1795689975000, "agent": "main", "tool": "Bash", "label": "npm test -- notifications", "outcome": "error" },
+    { "at": 1795689990000, "agent": "main", "tool": "Bash", "label": "npm test -- notifications" }
+  ],
+  "tools": [
+    { "tool": "Read", "count": 14, "errors": 0 },
+    { "tool": "Edit", "count": 9, "errors": 0 },
+    { "tool": "Bash", "count": 11, "errors": 2 },
+    { "tool": "Grep", "count": 3, "errors": 0 }
+  ],
+  "changes": [
+    { "path": "lib/notify.ts", "count": 4, "agents": ["h2"], "at": 1795689940000 },
+    { "path": "lib/tickets.ts", "count": 1, "agents": ["main"], "at": 1795689800000 }
+  ],
+  "alerts": [
+    { "at": 1795689960000, "kind": "denied", "agent": "h2", "text": "A helper tried to run rm -rf node_modules and was blocked." },
+    { "at": 1795689970000, "kind": "budget", "agent": "main", "text": "Prompt cost is at 25 percent of the 5 dollar budget." }
+  ]
+}
