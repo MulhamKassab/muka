@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { phoneText } from './register'
 
 const BRIEF = 'Write the mailer in src/mailer.ts and its tests in src/mailer.test.ts. Known: the queue in src/queue.ts already works. Done when the tests pass. Reply with Changed, Tested and Open issues in at most 150 words.'
 
@@ -84,4 +85,17 @@ test('the terminal Activity view lists the tools as text', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /Grep.*1×/ })).toBeDefined()
   expect((await ui.findAll({ type: 'Svg' })).length).toBe(0)
   await ui.unmount()
+})
+
+test('/muka phone says who is attached and where the pane stands', () => {
+  const none = phoneText({ surfaces: ['desktop'], attaches: [], opened: { isPlaced: false, reason: 'no surface places panes' }, pane: { isPlaced: false, isShown: false } })
+  expect(none).toContain('Screens attached now: desktop')
+  expect(none).toContain('not placed (no surface places panes)')
+  expect(none).toContain('waiting undrawn')
+  expect(none).toContain('No phone has attached yet')
+  const phone = phoneText({ surfaces: ['desktop', 'mobile'], attaches: [{ surface: 'mobile', clientId: 'mobile:default', at: 0, columns: 42 }], opened: { isPlaced: true }, pane: { isPlaced: true, isShown: true } })
+  expect(phone).toContain('mobile')
+  expect(phone).toContain('(42 cols)')
+  expect(phone).toContain('Opening the pane: placed')
+  expect(phone).toContain('open the Mods sheet')
 })

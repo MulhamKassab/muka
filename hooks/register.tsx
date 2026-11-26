@@ -233,6 +233,7 @@ const menuConfirm = atom({ plugin: 'muka', key: 'menuConfirm' } as const, { key:
 // Kept in $.store so they carry across sessions; re-read at each session.start
 // (a reload runs session.start again too).
 let isOn = true
+const phoneAttaches: Attach[] = []
 let isGuardOn = false
 let isInteractive = true
 // The app the session runs in (CLAUDE_CODE_ENTRYPOINT). The desktop app and
@@ -4619,6 +4620,7 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     '- Context: /muka context (what filled Main\'s context: rules and notes, tool results by kind)',
     '- Handoff: /muka handoff (Main writes .claude/handoff.md for a fresh chat); /muka compact (hint Main to /compact now)',
     '- Menu: /muka menu opens the ☰ tab, a button for every command',
+    '- Phone: /muka phone (which screens are attached, and opens the pane for the phone)',
     '- Report: /muka report (the last 7 days: spend by model, helper and size, waste caught, suggestions)',
     '- REA (Reverse Engineer Anything): /muka rea (status), /muka rea setup (install or update), /muka rea doctor',
     `- Budget: ${defaultBudget ? `${usd(defaultBudget)} per prompt` : 'none'} (/muka budget 5, /muka budget off)`,
@@ -4626,6 +4628,30 @@ const mukaStatus = async (_$: EngineInterface): Promise<{ text: string }> => ({
     '- Setup: /muka setup installs the helper agents, the verify skill, the status line and the settings; /muka setup undo puts back what it replaced',
   ].join('\n'),
 })
+
+/** A screen that joined the session (a phone over Remote Control, the desktop app). */
+export type Attach = { surface: string; clientId: string; at: number; columns?: number }
+
+/** What /muka phone says: who is attached, who came, and where Muka's pane stands. */
+export const phoneText = (o: {
+  surfaces: readonly string[]
+  attaches: readonly Attach[]
+  opened?: { isPlaced: boolean; reason?: string }
+  pane?: { isPlaced: boolean; isShown: boolean }
+}): string => {
+  const time = (t: number) => { const d = new Date(t); return `${two(d.getHours())}:${two(d.getMinutes())}` }
+  const hasPhone = o.surfaces.includes('mobile') || o.attaches.some(a => a.surface === 'mobile')
+  return [
+    `Muka phone check`,
+    `- Screens attached now: ${o.surfaces.length ? o.surfaces.join(', ') : 'none'}`,
+    `- Joined since Muka loaded: ${o.attaches.length ? o.attaches.map(a => `${a.surface} at ${time(a.at)}${a.columns ? ` (${a.columns} cols)` : ''}`).join('; ') : 'none'}`,
+    `- Opening the pane: ${o.opened === undefined ? 'not tried' : o.opened.isPlaced ? 'placed' : `not placed (${o.opened.reason ?? 'no reason given'})`}`,
+    `- Pane now: ${o.pane === undefined ? 'not open' : `${o.pane.isPlaced ? 'placed' : 'waiting undrawn'}${o.pane.isShown ? ', shown' : ''}`}`,
+    hasPhone
+      ? '- A phone is attached: open the Mods sheet in this session on the phone and pick Muka.'
+      : '- No phone has attached yet: open this session in the Claude iPhone app (not Safari), then run /muka phone again.',
+  ].join('\n')
+}
 
 /** The user's home folder, with forward slashes. */
 const homeDir = async ($: EngineInterface): Promise<string | undefined> => {
@@ -5042,6 +5068,19 @@ const runCommand = async ($: EngineInterface, args: string): Promise<{ text: str
     await sendToMany($, compactNote((await read($, main)).ctxPercent), { main: true, helpers: false })
     return { text: 'Muka compact hint: Main is asked to run /compact at its next step.' }
   }
+  if (words[0] === 'phone') {
+    let opened: { isPlaced: boolean; reason?: string } | undefined
+    try {
+      if (!isOn) { isOn = true; await $.store.set('enabled', true) }
+      opened = await $.ui.open({ id: PANE, title: TITLE })
+      await refreshStatus($)
+    } catch (err) {
+      opened = { isPlaced: false, reason: err instanceof Error ? err.message : String(err) }
+    }
+    const surfaces = await $.session.surfaces().catch(() => [] as readonly string[])
+    const pane = (await $.ui.panes().catch(() => [])).find(x => x.id === PANE)
+    return { text: phoneText({ surfaces, attaches: phoneAttaches, opened, pane }) }
+  }
   if (words[0] === 'menu') {
     await update($, view, () => 'menu')
     return { text: 'Muka menu: the ☰ tab of the panel has a button for every command.' }
@@ -5153,6 +5192,13 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'muka' }, ($, e) => runCommand($, e.args))
+
+  // A phone or the desktop app joined: kept so /muka phone can say who came.
+  on('session.attach', async ($, e, next) => {
+    phoneAttaches.push({ surface: String(e.surface), clientId: e.clientId, at: Date.now(), columns: e.viewport?.columns })
+    if (phoneAttaches.length > 10) phoneAttaches.shift()
+    return next(e)
+  })
 
   // Smart: the rules join each new conversation's context, as CLAUDE.md does.
   on('prompt.context', async ($, e, next) => {

@@ -221,6 +221,8 @@ The pictures move: the radar sweeps, the LIVE dot and the prompt cursor blink, w
 
 The Claude phone app gets the same cards as the desktop (the pictures scale to the screen width), including the Score. The 🎯 Steer tab stays on the phone, because the app may not offer a text box to a mod: every action also has a button (the quick notes in Steer, and Wrap up all, Stop helpers and Verify on the Bridge). The panel opens from the app's Mods sheet. Not yet checked on a real iPhone: it is tested only with the plugin test kit's phone surface.
 
+If the phone shows the session but not Muka, run `/muka phone` from the phone. It lists the screens attached to the session, opens the panel as your own request (a panel Muka opens by itself can wait undrawn on a screen that does not place panes), and says whether it was placed.
+
 In the terminal and editors the same views are text.
 
 The line under the message box is Muka's **pulse**. It shows the most urgent thing when something needs you (a stuck agent, failures, the budget, a full context). Otherwise it shows who is working, the spend and the context while work runs, and a one-line recap of the last task when idle.
