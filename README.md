@@ -227,7 +227,7 @@ The line under the message box is Muka's **pulse**. It shows the most urgent thi
 
 ## Delete guard
 
-Off by default. With `/muka guard on`, before a `Bash` or `PowerShell` command deletes files, Muka shows what it would remove and asks **Delete them** or **Block it**. Anything but Delete them blocks it, including a question that closes on its own. It reads common delete commands (`rm`, `del`, `Remove-Item`, `git clean -f`, `find -delete` and others), including ones wrapped in `sudo`, `bash -c`, `powershell -c` or `$(...)`. It cannot see deletes inside scripts or programs it runs, and it is a safety net, not a sandbox.
+Off by default. With `/muka guard on`, before a `Bash` or `PowerShell` command deletes files, Muka shows what it would remove and asks **Delete them** or **Block it**. Anything but Delete them blocks it, including a question that closes on its own. It reads common delete commands (`rm`, `del`, `Remove-Item`, `git clean -f`, `find -delete` and others), including ones wrapped in `sudo`, `bash -c`, `powershell -c` or `$(...)`. It also decodes `powershell -EncodedCommand` (and `-enc`, `-e`) and reads it the same way; one it cannot decode adds an Alerts line instead. Python and Node one-liners that delete (`python -c "shutil.rmtree(...)"`, `os.remove`, `Path(...).unlink()`, `node -e "fs.rmSync(...)"` and the like) are asked about too. It cannot see deletes inside scripts or programs it runs, and it is a safety net, not a sandbox.
 
 Apart from the delete guard, the model guard, pings, setup and the notes it and you send, Muka only watches: it never changes or blocks an agent's work.
 
