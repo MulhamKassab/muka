@@ -4,6 +4,7 @@ import {
   cacheRate,
   clean,
   findDeletes,
+  decodePsBase64,
   findRisks,
   flowChart,
   GUARD_DENY,
@@ -699,4 +700,51 @@ test('a piped-in script is still a risk, and long here-strings stay quick', () =
   findDeletes('$s = @"\n' + 'line\n'.repeat(50000), 'powershell')
   findDeletes("$s = @'\n" + 'line\n'.repeat(50000), 'powershell')
   expect(Date.now() - t0).toBeLessThan(2000)
+})
+
+test('encoded PowerShell commands are decoded and read like -Command', () => {
+  expect(decodePsBase64('UgBlAG0AbwB2AGUALQBJAHQAZQBtACAALQBSAGUAYwB1AHIAcwBlACAAYgB1AGkAbABkAA==')).toBe('Remove-Item -Recurse build')
+  for (const flag of ['-EncodedCommand', '-enc', '-ec', '-e', '-En', '-encodedcommand']) {
+    const command = `powershell ${flag} UgBlAG0AbwB2AGUALQBJAHQAZQBtACAALQBSAGUAYwB1AHIAcwBlACAAYgB1AGkAbABkAA==`
+    expect({ command, targets: findDeletes(command)[0]?.targets }).toEqual({ command, targets: ['build'] })
+  }
+  expect(findDeletes('pwsh.exe -NoProfile -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAALQBSAGUAYwB1AHIAcwBlACAAYgB1AGkAbABkAA==', 'powershell')).toHaveLength(1)
+  // Encoded text that deletes nothing, and options that only look alike, are no deletes.
+  expect(findDeletes('powershell -enc RwBlAHQALQBDAGgAaQBsAGQASQB0AGUAbQAgAEMAOgB3AG8AcgBrAA==')).toEqual([])
+  expect(findDeletes('powershell -ExecutionPolicy Bypass -File x.ps1')).toEqual([])
+  expect(findDeletes('powershell -ex Bypass -File x.ps1')).toEqual([])
+  // What cannot be decoded is not guessed at: a notice says so instead.
+  expect(decodePsBase64('not base64!')).toBeUndefined()
+  expect(decodePsBase64('AAEC')).toBeUndefined()
+  expect(findDeletes('powershell -enc @@@')).toEqual([])
+  expect(findRisks('powershell -enc @@@')).toEqual(['runs an encoded command Muka cannot read'])
+  expect(findRisks('powershell -enc RwBlAHQALQBDAGgAaQBsAGQASQB0AGUAbQAgAEMAOgB3AG8AcgBrAA==')).toEqual([])
+})
+
+test('Python and Node one-liners that delete files are found', () => {
+  for (const command of [
+    `python -c "import shutil; shutil.rmtree('build')"`,
+    `python3 -c "import os; os.remove('a.txt')"`,
+    `py -c "import os; os.unlink('a')"`,
+    `python3.12 -c "from pathlib import Path; Path('a').unlink()"`,
+    `python -c "import os; os.removedirs('a/b')"`,
+    `node -e "require('fs').rmSync('dist', { recursive: true })"`,
+    `node -e "fs.unlinkSync('a')"`,
+    `node --eval "require('fs').promises.rm('dist')"`,
+    `bun -e "fs.rmdirSync('d')"`,
+    `deno eval "fs.rmSync('b')"`,
+    `bash -c "python -c \\"import shutil; shutil.rmtree('x')\\""`,
+  ]) {
+    expect({ command, found: findDeletes(command).length > 0 }).toEqual({ command, found: true })
+  }
+  for (const command of [
+    `python -c "print(1 + 1)"`,
+    `python -c "import os; print(os.listdir('.'))"`,
+    `node -e "console.log(require('fs').readdirSync('.'))"`,
+    'node -p "1 + 1"',
+    'python script.py --remove',
+    'node build.js',
+  ]) {
+    expect({ command, found: findDeletes(command).length > 0 }).toEqual({ command, found: false })
+  }
 })

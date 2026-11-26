@@ -746,8 +746,28 @@ const gitArgs = (args: string[]): string[] => {
   return args.slice(i)
 }
 
+/** PowerShell's -EncodedCommand and the prefixes it accepts (-e, -ec, -en, -enc, ... -encodedcommand). */
+const PS_ENCODED = /^-(ec|e(n(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?)?)$/i
+
+/** The text of a PowerShell -EncodedCommand (Base64 of UTF-16LE), or undefined when it is not that. */
+export const decodePsBase64 = (b64: string): string | undefined => {
+  const s = b64.trim().replace(/^["']|["']$/g, '')
+  if (s === '' || s.length > 200_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return undefined
+  let bin: string
+  try {
+    bin = atob(s)
+  } catch {
+    return undefined
+  }
+  if (bin.length < 2 || bin.length % 2 !== 0) return undefined
+  let out = ''
+  for (let i = 0; i < bin.length; i += 2) out += String.fromCharCode(bin.charCodeAt(i) | (bin.charCodeAt(i + 1) << 8))
+  // Control characters other than tab and newlines: not text, so not a command.
+  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(out) ? undefined : out
+}
+
 /** A command another command runs from a string, and whose rules it follows. */
-const wrapped = (name: string, args: string[]): { text: string; dialect: Dialect } | undefined => {
+const wrapped =(name: string, args: string[]): { text: string; dialect: Dialect } | undefined => {
   if (['bash', 'sh', 'zsh', 'dash', 'ksh'].includes(name)) {
     const c = args.findIndex(a => /^-[a-z]*c[a-z]*$/i.test(a))
     return c >= 0 && args[c + 1] !== undefined ? { text: args[c + 1]!, dialect: 'bash' } : undefined
@@ -761,7 +781,11 @@ const wrapped = (name: string, args: string[]): { text: string; dialect: Dialect
   }
   if (name === 'powershell' || name === 'pwsh') {
     const c = args.findIndex(a => /^-(c|command)$/i.test(a))
-    return c >= 0 ? { text: rejoin(args.slice(c + 1)), dialect: 'powershell' } : undefined
+    if (c >= 0) return { text: rejoin(args.slice(c + 1)), dialect: 'powershell' }
+    // -EncodedCommand (or -e, -ec, -enc, ...): Base64 of UTF-16LE text, read like -Command.
+    const e = args.findIndex(a => PS_ENCODED.test(a))
+    const text = e >= 0 ? decodePsBase64(args[e + 1] ?? '') : undefined
+    return text !== undefined ? { text, dialect: 'powershell' } : undefined
   }
   // A bare eval or iex runs what is piped in: that is a risk, not a wrapper.
   if (args.length === 0) return undefined
@@ -776,6 +800,19 @@ const CMD_STYLE = new Set(['del', 'erase', 'rd', 'rmdir'])
 const PS_VALUED = /^-(erroraction|ea|warningaction|wa|informationaction|infa|errorvariable|ev|warningvariable|wv|informationvariable|iv|outvariable|ov|outbuffer|ob|pipelinevariable|pv|filter|include|exclude|credential|stream)$/i
 
 export type DeletePlan = { command: string; targets: string[] }
+
+/** The code a Python or Node one-liner runs (python -c, node -e/-p/--eval/--print, deno eval), or undefined. */
+export const scriptCode = (name: string, args: string[]): string | undefined => {
+  const flag = /^python(\d+(\.\d+)?)?w?$|^py$/.test(name) ? /^-[a-z]*c$/i : ['node', 'bun'].includes(name) ? /^(-e|-p|--eval|--print)$/ : undefined
+  if (name === 'deno') return args[0] === 'eval' ? args.slice(1).filter(a => !a.startsWith('-')).join(' ') || undefined : undefined
+  if (!flag) return undefined
+  const i = args.findIndex(a => flag.test(a))
+  return i >= 0 ? args[i + 1] : undefined
+}
+
+/** Calls that delete files in Python (shutil.rmtree, os.remove/unlink/rmdir/removedirs, Path.unlink/rmdir) or Node (fs.rm/unlink/rmdir and their Sync forms). */
+export const SCRIPT_DELETES =
+  /\bshutil\s*\.\s*rmtree\s*\(|\bos\s*\.\s*(remove|unlink|rmdir|removedirs)\s*\(|\.\s*(unlink|rmdir|rmSync|unlinkSync|rmdirSync)\s*\(|\b(fs|fsp|promises)\s*\.\s*rm\s*\(|\b(rmSync|unlinkSync|rmdirSync)\s*\(/
 
 /** The deletes a command line runs, each with the paths it names; empty when none. */
 export const findDeletes = (command: string, dialect: Dialect = 'bash', depth = 0): DeletePlan[] => {
@@ -833,6 +870,10 @@ export const findDeletes = (command: string, dialect: Dialect = 'bash', depth = 
         }
         plans.push({ command: `find ${args.join(' ')}`, targets: start.length > 0 ? start.map(s => `${s} (matching files)`) : ['. (matching files)'] })
       }
+    } else {
+      // A Python or Node one-liner that deletes (python -c "shutil.rmtree(...)", node -e "fs.rmSync(...)").
+      const code = scriptCode(name, args)
+      if (code !== undefined && SCRIPT_DELETES.test(code)) plans.push({ command: clip(`${name} ${args.join(' ')}`, 200), targets: [] })
     }
   }
   // .NET deletes in PowerShell, read off the raw text with quoted strings
@@ -878,6 +919,10 @@ const RISKY: { test: (name: string, args: string[], line: string) => boolean; wh
   { test: (n, a) => ['kubectl', 'terraform', 'helm'].includes(n) && ['delete', 'destroy', 'apply', 'uninstall'].includes(a[0] ?? ''), why: 'changes infrastructure' },
   { test: (n, _a, line) => DB_CLIENTS.has(n) && /\bdrop\s+(table|database|schema)\b|\btruncate\s+table\b/i.test(line), why: 'drops database data' },
   { test: (n, a) => ['sh', 'bash', 'zsh', 'iex', 'invoke-expression'].includes(n) && a.every(x => x.startsWith('-')) && !a.some(x => /^-[a-z]*c[a-z]*$/i.test(x)), why: 'runs a script piped in from elsewhere' },
+  {
+    test: (n, a) => (n === 'powershell' || n === 'pwsh') && a.some((x, i) => PS_ENCODED.test(x) && decodePsBase64(a[i + 1] ?? '') === undefined),
+    why: 'runs an encoded command Muka cannot read',
+  },
 ]
 
 /** Why a command line is risky (not counting deletes, which the guard asks about). */
