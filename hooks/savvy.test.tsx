@@ -140,7 +140,7 @@ test('a subagent shows running, then done, with both bars, on every surface', as
     changed: ['context'],
   })
 
-  for (const surface of ['terminal', 'vscode', 'mobile'] as const) {
+  for (const surface of ['terminal', 'vscode'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     expect(await ui.find({ type: 'Text', text: /Explore \(haiku 5\.5\).*Find config files.*running/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /0\/1 done/ })).toBeDefined()
@@ -157,6 +157,14 @@ test('a subagent shows running, then done, with both bars, on every surface', as
     expect(String(svg!.props.alt)).toMatch(/Agent tree\. .*Explore \(haiku 5\.5\) running, started by Main: Find config files/)
     // The Orbit draws the helper by name; its task is in the description.
     expect(String(svg!.props.source)).toContain('>Explore<')
+    await ui.unmount()
+  }
+  {
+    // The phone gets the same cards as the desktop (changed on purpose: it used to get text lines).
+    const ui = await $.ui.mount({ ...PANE, surface: 'mobile' })
+    const pictures = await ui.findAll({ type: 'Svg' })
+    expect(String(pictures[0]!.props.alt)).toMatch(/subagents 0\/1 done/)
+    expect(pictures.some(p => String(p.props.alt).includes('Agent tree.'))).toBe(true)
     await ui.unmount()
   }
 

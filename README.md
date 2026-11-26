@@ -208,13 +208,18 @@ A row of icons opens each view: 🧭 Bridge, ☰ Menu, 📜 Activity, ⚠️ Ale
   - **Controls**, toggles that are highlighted while on, each doing what its `/muka` command does: 🧠 Rules (smart), ♻️ Nudges, 🛡 Model guard, 🗑 Delete guard, 🔔 Pings, ✨ Motion, and 💲 Budget, which cycles off, $2, $5, $10, off.
   - **Actions**, each with a toast: ⏸ Wrap up all (a wrap-up note to Main and every running helper), ⏹ Stop helpers (a stop-and-report note to every running helper), ✅ Verify (asks Main to run the tests, build and linter, and look at anything visible), and 📊 Report (the last 7 days, as `/muka report` prints it, with a button back to the Bridge).
   - **Verified badge:** next to LIVE/IDLE, a green ✓ VERIFIED chip shows once tests, a build, the linter or a look at the running app followed your last file change, and an amber ⚠ UNVERIFIED chip shows while a change has not been checked. It resets with each new prompt. While idle with unverified changes, the pulse reads "⚠ changes not verified yet".
-- **📜 Activity:** a lane per agent with a dot per step (failures in red) and the latest steps.
+- **Muka Score** (a card under the Bridge): one number, 0 to 100, with a grade (S+ from 95, S from 90, A from 80, B from 65, else C), for how this prompt is going. Four pillars: cache use of Main's last turn (30%), reliability (30%: helpers that failed or were stopped and steps that errored, against all of them), model discipline (20%: helpers that named a model and are not an Explore on Opus or Fable) and context headroom (20%). A pillar with no reading yet is left out and the rest are weighted up to make 100%; with none, the card shows "—" and no grade.
+- **📜 Activity:** a lane per agent with a dot per step (failures in red), a **Tools · this prompt** card (the ten most used tools: how many times, how many errors, who used them; red when one errored; this prompt only, the last 200 steps) and the latest steps. In the terminal the same is up to five text lines.
 - **⚠️ Alerts:** tiles for failed, denied, risky, outside the project, stuck and warnings, and the latest events.
-- **📝 Changes:** a bar per changed file (red outside the project), ± to see its diff, and deletes.
+- **📝 Changes:** a bar per changed file (red outside the project), a **Files by helper** card (how many files each agent changed), ± to see its diff, and deletes.
 - **💲 Spend:** spend by model against the budget, and per agent (at API prices).
 - **💡 Reflect:** the last turn as tiles, and an AI review on demand.
 
 The pictures move: the radar sweeps, the LIVE dot and the prompt cursor blink, working helpers pulse and ping, links to them flow, Main breathes while it works, sparks travel to working helpers, and the current plan step pulses. The motion carries on smoothly when the numbers update. The ✨ Motion toggle on the Bridge (or `/muka motion off`) stops them, and a system "reduce motion" setting always keeps them still.
+
+### On a phone
+
+The Claude phone app gets the same cards as the desktop (the pictures scale to the screen width), including the Score. The 🎯 Steer tab stays on the phone, because the app may not offer a text box to a mod: every action also has a button (the quick notes in Steer, and Wrap up all, Stop helpers and Verify on the Bridge). The panel opens from the app's Mods sheet. Not yet checked on a real iPhone: it is tested only with the plugin test kit's phone surface.
 
 In the terminal and editors the same views are text.
 

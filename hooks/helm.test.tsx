@@ -213,9 +213,10 @@ test('on desktop the Bridge is one Muka card under a row of icons', async ($, on
   await $.agent.spawn({ prompt: BRIEF, description: 'Build it', subagentType: 'builder' } as never)
   await $.tool.call({ tool: 'Read', file_path: 'C:\work\a.ts', agentId: 'agent-1' } as never)
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  // One card: the head, the orbit, the gauges and the latest steps.
+  // The Muka card (the head, the orbit, the gauges and the latest steps), then the Muka Score card.
   const pictures = await desk.findAll({ type: 'Svg' })
-  expect(pictures).toHaveLength(1)
+  expect(pictures).toHaveLength(2)
+  expect(String(pictures[1]!.props.alt)).toMatch(/^Muka Score: /)
   const alt = String(pictures[0]!.props.alt)
   expect(alt).toMatch(/^Muka\. .*Agent tree. .*Usage limit .*Recent: .*builder Read/)
   const source = String(pictures[0]!.props.source)

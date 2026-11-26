@@ -2859,6 +2859,114 @@ export const barsCard = (title: string, rows: BarRow[], max?: number, empty = 'N
   return { source: card(W, Hh, parts.join('')), alt: clip(`${title}: ${rows.map(r => `${r.label} ${r.text}`).join(', ') || empty}`, 1500) }
 }
 
+// ---------------------------------------------------------------------------
+// Muka Score: one number for how well this prompt is going.
+
+export type ScorePillar = { key: 'cache' | 'reliability' | 'models' | 'context'; label: string; value?: number }
+export type MukaScoreResult = { score?: number; grade?: string; pillars: ScorePillar[] }
+
+const SCORE_WEIGHTS: Record<ScorePillar['key'], number> = { cache: 0.3, reliability: 0.3, models: 0.2, context: 0.2 }
+
+/** S+ from 95, S from 90, A from 80, B from 65, else C. */
+export const scoreGrade = (score: number): string => (score >= 95 ? 'S+' : score >= 90 ? 'S' : score >= 80 ? 'A' : score >= 65 ? 'B' : 'C')
+
+/**
+ * How this prompt is going, 0-100: cache use of Main's last turn (30%), reliability
+ * (30%: helpers that failed or were stopped and steps that errored, against all of them),
+ * model discipline (20%: helpers that named a model and are not an Explore on opus or
+ * fable) and context headroom (20%). A pillar with no reading is left out and the
+ * rest are weighted up to make 100%; with none, there is no score.
+ */
+export const mukaScore = (input: { info: MainInfo; list: SubAgent[]; feed: ActivityItem[] }): MukaScoreResult => {
+  const { info, list, feed } = input
+  const total = list.length + feed.length
+  const bad = list.filter(a => a.status === 'failed' || a.status === 'stopped').length + feed.filter(s => s.outcome === 'error').length
+  const clamp = (n: number) => Math.max(0, Math.min(100, n))
+  const disciplined = list.filter(a => a.picked !== false && !(a.type === 'Explore' && /opus|fable/i.test(a.model))).length
+  const pillars: ScorePillar[] = [
+    { key: 'cache', label: 'Cache', value: cacheRate(info.usage) },
+    { key: 'reliability', label: 'Reliability', value: total > 0 ? clamp(100 * (1 - bad / total)) : undefined },
+    { key: 'models', label: 'Models', value: list.length > 0 ? clamp((100 * disciplined) / list.length) : undefined },
+    { key: 'context', label: 'Headroom', value: info.ctxPercent === undefined ? undefined : clamp(100 - info.ctxPercent) },
+  ]
+  const read = pillars.filter(p => p.value !== undefined)
+  if (read.length === 0) return { pillars }
+  const weight = read.reduce((n, p) => n + SCORE_WEIGHTS[p.key], 0)
+  const score = Math.round(read.reduce((n, p) => n + p.value! * SCORE_WEIGHTS[p.key], 0) / weight)
+  return { score, grade: scoreGrade(score), pillars }
+}
+
+/** The Muka Score as a card: a ring with the number and grade, a bar for each pillar. */
+export const scoreCard = (s: MukaScoreResult): Card => {
+  const W = HELM_W
+  const hue = s.score === undefined ? H.faint : s.score >= 80 ? H.green : s.score >= 65 ? H.amber : H.red
+  const cx = 82
+  const cy = 112
+  const r = 44
+  const len = 2 * Math.PI * r
+  const arc = ((len * (s.score ?? 0)) / 100).toFixed(1)
+  const parts: string[] = [`<text x="20" y="30" class="hl">MUKA SCORE</text>`]
+  parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${H.track}" stroke-width="10"/>`)
+  if (s.score) parts.push(`<circle class="sweep" style="--d:${arc}" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${grad('a', hue)}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${arc} ${len.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`)
+  parts.push(`<text x="${cx}" y="${cy + 4}" class="hn" text-anchor="middle" style="font-weight:800;font-size:26px;fill:${hue}">${s.score === undefined ? '—' : s.score}</text>`)
+  parts.push(`<text x="${cx}" y="${cy + 24}" class="hl" text-anchor="middle" style="fill:${hue}">${s.grade ?? 'NO GRADE'}</text>`)
+  const hues: Record<ScorePillar['key'], string> = { cache: H.violet, reliability: H.green, models: H.cyan, context: H.amber }
+  const bx = 160
+  const track = W - 20 - bx
+  s.pillars.forEach((p, i) => {
+    const y = 52 + i * 34
+    const v = p.value
+    parts.push(`<g class="row"><title>${xml(`${p.label}: ${v === undefined ? 'no reading yet' : `${Math.round(v)}%`}`)}</title>`)
+    parts.push(`<text x="${bx}" y="${y}" class="hl">${xml(p.label.toUpperCase())}</text>`)
+    parts.push(`<text x="${W - 20}" y="${y}" class="hs" text-anchor="end" style="font-size:12px">${v === undefined ? '—' : `${Math.round(v)}%`}</text>`)
+    parts.push(`<rect x="${bx}" y="${y + 6}" width="${track}" height="8" rx="4" fill="${H.track}"/>`)
+    if (v) parts.push(shinyBar(bx, y + 6, Math.max(3, (track * v) / 100), 8, grad('b', hues[p.key]), delay(i, 0.07)))
+    parts.push('</g>')
+  })
+  const Hh = 190
+  const alt = `Muka Score: ${s.score === undefined ? 'no reading yet' : `${s.score} of 100, grade ${s.grade}`}. ${s.pillars.map(p => `${p.label} ${p.value === undefined ? 'no reading' : `${Math.round(p.value)}%`}`).join(', ')}.`
+  return { source: card(W, Hh, parts.join('')), alt }
+}
+
+/** The tools used this prompt, most used first: count, errors and who used them. */
+export const toolRows = (feed: ActivityItem[], max = 10): BarRow[] => {
+  const by = new Map<string, { n: number; err: number; who: string[] }>()
+  for (const s of feed) {
+    const t = by.get(s.tool) ?? { n: 0, err: 0, who: [] }
+    t.n++
+    if (s.outcome === 'error') t.err++
+    if (!t.who.includes(s.agent)) t.who.push(s.agent)
+    by.set(s.tool, t)
+  }
+  return [...by.entries()]
+    .sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]))
+    .slice(0, max)
+    .map(([tool, t]) => ({
+      label: tool,
+      value: t.n,
+      text: `${t.n}×${t.err > 0 ? ` · ${t.err} err` : ''} · ${clip(t.who.join(', '), 10)}`,
+      hue: t.err > 0 ? H.red : H.cyan,
+    }))
+}
+
+/** The tool card: this prompt's steps only (the last 200 kept). */
+export const toolsCard = (feed: ActivityItem[]): Card => {
+  const c = barsCard('Tools · this prompt', toolRows(feed), undefined, 'No steps yet this prompt.')
+  return { source: c.source, alt: `${c.alt} (this prompt only, the last ${ACTIVITY_KEPT} steps)` }
+}
+
+/** How many files each agent changed, most first. */
+export const helperFileRows = (files: FileChange[]): BarRow[] => {
+  const by = new Map<string, number>()
+  for (const f of files) for (const a of new Set(f.agents)) by.set(a, (by.get(a) ?? 0) + 1)
+  return [...by.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 10)
+    .map(([agent, n]) => ({ label: `${agentIcon(agent)} ${agent}`, value: n, text: `${n} ${n === 1 ? 'file' : 'files'}`, hue: feedHue(agent) }))
+}
+
+export const filesByHelperCard = (files: FileChange[]): Card => barsCard('Files by helper', helperFileRows(files), undefined, 'No files changed yet.')
+
 /** One tile: a big number or word, an icon, a small label; grey when there is nothing to see. */
 export type Tile = { icon: string; value: string; label: string; hue: string; isOn: boolean }
 
@@ -5697,8 +5805,9 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       </Text>,
       <Text dimColor>{c.running > 0 ? `${c.running} working now` : 'No subagent working now'}</Text>,
     ]
-    // The desktop app draws the same as one card.
-    if (e.surface === 'desktop') {
+    // The desktop app and the phone draw the same as one card (Svg scales to the width). Only the desktop hides the Steer tab: a phone app may not have declared Input, so Steer there is reached by its buttons.
+    const isRich = e.surface === 'desktop' || e.surface === 'mobile'
+    if (isRich) {
       const { Svg } = $.ui.resolve(e)
       const card = bridgeStrip(info, list, defaultBudget)
       header = current === 'flow' ? [] : [<Svg source={card.source} alt={card.alt} />]
@@ -5731,8 +5840,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
     const viewName = <Text bold>{VIEW_ICONS.find(t => t.view === current)?.label ?? (current === 'report' ? 'Report' : '')}</Text>
 
     // The desktop app: the icon row on top, then the Helm card, then the view.
-    const isDesk = e.surface === 'desktop'
-    const deskSvg = e.surface === 'desktop' ? $.ui.resolve(e).Svg : undefined
+    const isDesk = isRich
+    const deskSvg = isRich ? $.ui.resolve(e).Svg : undefined
     const pic = (c: { source: string; alt: string }): RenderChildren => {
       if (!deskSvg) return <Text> </Text>
       const Pic = deskSvg
@@ -5804,6 +5913,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         const chron = [...feed].reverse()
         return page([
           pic(lanesCard(chron, list)),
+          pic(toolsCard(all)),
           <Input key="feed-search" placeholder="🔍 Filter by agent or tool" value={filter} submitLabel="Filter" onSubmit={text => update($, feedFilter, () => clean(text))} />,
           pic(feedCard(chron, 8)),
         ])
@@ -5827,6 +5937,12 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
               </Text>
             ))),
         feed.length > room ? <Text dimColor>… and {feed.length - room} earlier</Text> : <Text> </Text>,
+        ...(all.length > 0 ? [<Text bold>Tools this prompt</Text>] : []),
+        ...toolRows(all, 5).map(r => (
+          <Text>
+            <Text color={r.hue === HELM_HUE.red ? 'red' : 'cyan'}>●</Text> {r.label} <Text dimColor>· {r.text}</Text>
+          </Text>
+        )),
       ])
     }
 
@@ -6007,7 +6123,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
       const estimated = byModel.reduce((n, [, v]) => n + v, 0)
       const rest = info.costUsd !== undefined ? info.costUsd - estimated : undefined
       const spendPicture: RenderChildren[] = []
-      if (e.surface === 'desktop') {
+      if (isRich) {
         const { Svg } = $.ui.resolve(e)
         const spendCard = spendBar(info.spendByModel, budgetState(info, defaultBudget)?.budget)
         spendPicture.push(<Svg source={spendCard.source} alt={spendCard.alt} />)
@@ -6066,6 +6182,7 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         const delRows = deletes.map(n => ({ icon: n.kind === 'delete-blocked' ? '⛔' : '🗑️', who: n.agent, what: n.text, hue: n.kind === 'delete-blocked' ? HELM_HUE.red : HELM_HUE.text }))
         return page([
           pic(barsCard(`Files changed · ${files.length}`, fileRows, undefined, 'No files changed yet.')),
+          pic(filesByHelperCard(files)),
           shown.length > 0 ? (
             <Box flexDirection="row" flexWrap="wrap" gap={1}>
               {shown.slice(0, 8).map((f, i) => (
@@ -6381,8 +6498,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
         <Text> </Text>
       )
 
-    // The flow chart: an SVG on desktop, top-down while it fits, else the list.
-    if (e.surface === 'desktop') {
+    // The flow chart: an SVG on desktop and phone, top-down while it fits, else the list.
+    if (isRich) {
       const { Svg } = $.ui.resolve(e)
       // The Bridge as one card, then a button per agent.
       const bridge = bridgeCard(info, list, await read($, activity), defaultBudget)
@@ -6429,7 +6546,8 @@ ${helperBrief(levelOf(list, e.parentAgentId))}` }
           </Box>
         </Box>
       )
-      return page([<Svg source={bridge.source} alt={bridge.alt} />, openers, controls, actions])
+      const score = scoreCard(mukaScore({ info, list, feed: await read($, activity) }))
+      return page([<Svg source={bridge.source} alt={bridge.alt} />, <Svg source={score.source} alt={score.alt} />, openers, controls, actions])
     }
 
     // Elsewhere, the same flow as a text tree. An agent's row and its step
